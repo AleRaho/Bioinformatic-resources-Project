@@ -1,0 +1,63 @@
+---
+title: "Bioinformatic Resources Project"
+author: "Camilla Pelagalli, Alessadnro Salvatore Raho"
+date: "5/2/2023"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("ggplot2")
+library("biomaRt")
+library("edgeR")
+```
+punto 1: load data
+```{r}
+setwd("~/Desktop/")
+load("~/Downloads/Lung_squamous_cell_carcinoma.RData")
+```
+Check number of transcripts
+```{r}
+dim(raw_counts_df)
+head(raw_counts_df)
+dim(r_anno_df)
+head(r_anno_df)
+dim(c_anno_df)
+head(c_anno_df)
+```
+punto 2: update data extracting only coding regions
+```{r}
+ensembl<- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
+anno_query<- getBM(attributes = c("ensembl_gene_id", "gene_biotype"), filters = ("ensembl_gene_id"), values = r_anno_df$ensembl_gene_id, mart = ensembl)
+dim(anno_query)
+head(anno_query)
+
+coding_query<-anno_query[which(anno_query$gene_biotype == "protein_coding"), ]
+
+tmp<-raw_counts_df
+coding_raw<- merge(coding_query,tmp, by.y = 'row.names', by.x = "ensembl_gene_id")
+tmp2<- coding_raw[1:nrow(coding_raw),3:ncol(coding_raw)]
+row.names(tmp2)= coding_raw$ensembl_gene_id
+```
+
+
+Check the library size of each sample
+```{r}
+size_raw<-data.frame("sample"=colnames(raw_counts_df),"read_millions"=colSums(raw_counts_df/1000000))
+ggplot(data=size_raw, aes(sample,read_millions))+
+  geom_bar(stat="identity", fill="grey50",colour="grey50", width=0.7, alpha=0.7) + coord_flip() + theme_bw()
+```
+
+```{r}
+threshold<-20
+repl_thr<-5
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
