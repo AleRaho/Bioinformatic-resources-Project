@@ -1,11 +1,11 @@
 ---
-title: "Untitled"
-author: "Alessadnro Salvatore Raho"
-date: "5/10/2023"
+title: "Bioinformatics Resources Project 2023"
+authors: "Alessadnro Salvatore Raho, Camilla Pelagalli"
+date: "07/09/2023"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE)
 library("ggplot2")
 library("biomaRt")
@@ -25,60 +25,110 @@ library("MotifDb")
 library("igraph")
 ```
 
-**First: load data**
+We have chosen the RNA-seq count data extracted from the lung squamous cell carcinoma dataset, knowing that from the original TCGA data 50 cases (tumor samples) and 50 controls (normal samples) were randomly selected.
 
-```{r}
-setwd("~/Desktop/")
-load("~/Downloads/Lung_squamous_cell_carcinoma.RData")
+**1. Load the RData file.**
+
+```{r, include=TRUE} 
+path <- getwd() load(paste(path, "/Lung_squamous_cell_carcinoma.RData", sep=""))`
 ```
-Loaded the data we can inspect the three datasets gathering some basic information.
-```{r}
-dim(raw_counts_df)
-head(raw_counts_df)
-dim(r_anno_df)
-head(r_anno_df)
-dim(c_anno_df)
-head(c_anno_df)
+We can see that three different data-frames have been uploaded. Let us inspect them separately.
+
+```{r, include=TRUE}
+head(raw_counts_df, 3)
+cat("\nDimension: ", dim(raw_counts_df))
 ```
 
-```{r}
+The data-frame *raw_counts_df* represents the raw RNA-seq counts (sequence reads per gene/how many reads have mapped to each gene): the rows correspond to the Ensembl Gene IDs (ex: ENSG00000278704) and the columns to the tumor and normal samples from which the reads were counted for each gene (ex: TCGA-22-4609-01A). 62940 genes are included in the data-frame and 100 samples are taken into account, 50 cases and 50 controls, respectively.
+
+```{r, include=TRUE}
+head(c_anno_df,10)
+cat("\nDimension: ", dim(c_anno_df))
+```
+
+The data-frame *c_anno_df* specifies the condition (*condition* column) corresponding to each sample name (*sample* column), either "case" or "control". The number of rows (samples) is 100, properly matching the number of columns (samples) of *raw_counts_df*.
+
+```{r, include=TRUE}
+head(r_anno_df,10)
+cat("\nDimension: ", dim(r_anno_df))
+```
+
+The data-frame *r_anno_df* maps each *Ensembl gene ID* from *raw_counts_df* to its *external gene name*, or gene symbol, and *length*. So the number of rows is 62940.
+
+**2. Extract protein-coding genes**
+
+Since we want to perform differential gene expression analysis, we are interested only in protein coding genes, so we need to filter *raw_counts_df* according to this experimental choice. The R package **biomaRt** allows us to connect to a specific biomaRt database, in this case the ENSEMBL database, and to select the Human genes (GRCh38.p13) dataset.
+
+```{r, include=TRUE}
 ensembl<- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
-anno_query<- getBM(attributes = c("ensembl_gene_id", "gene_biotype"), filters = ("ensembl_gene_id"), values = r_anno_df$ensembl_gene_id, mart = ensembl)
-dim(anno_query)
+```
+
+The *getBM()* function is the main query function in biomaRt and it has four main arguments: *attributes*, *filters*, *values* and *mart*. We have already set the latter and assigned it to the variable *ensembl*. The coding/non-coding information is included in the attribute *gene_biotype*. We have chosen to filter the Human genes dataset according to the *ensembl_gene_id* attribute, which we have at disposal to identify the genes belonging to our starting dataset related to lung squamous cell carcinoma.
+
+```{r, include=TRUE}
+anno_query<- getBM(attributes = c("ensembl_gene_id", "gene_biotype"), 
+                   filters = ("ensembl_gene_id"), 
+                   values = r_anno_df$ensembl_gene_id, 
+                   mart = ensembl)
 head(anno_query)
+cat("\nDimension: ", dim(anno_query))
+```
 
+All the genes are now matched to their type so we can subset the lung squamous cell carcinoma dataset to include only protein coding genes.
+
+```{r, include=TRUE}
 coding_query<-anno_query[which(anno_query$gene_biotype == "protein_coding"), ]
+cat("\nDimension: ", dim(coding_query))
+head(coding_query)
+```
 
+The number of genes has approximately become \~1/3 of the initial number of genes. After merging the *coding_query* result with the starting dataset, we have the updated version of the dataset, containing only protein coding genes (*clean_coding_raw*).
+
+```{r, include=TRUE}
 tmp<-raw_counts_df
 coding_raw<- merge(coding_query,tmp, by.y = 'row.names', by.x = "ensembl_gene_id")
 clean_coding_raw<- coding_raw[1:nrow(coding_raw),3:ncol(coding_raw)]
 row.names(clean_coding_raw)= coding_raw$ensembl_gene_id
 ```
 
-```{r}
-size_raw<-data.frame("sample"=colnames(tmp2),"read_millions"=colSums(clean_coding_raw/1000000))
+**3.Perform differential expression analysis**
+
+The dataset contains standard counts, so the number of reads $X_i$ for each gene transcript $i$ in $N$ given samples/replicates. We need to obtain the counts per million (CPM, *read_millions*), so we can check the library size of each sample. We have generated a bar plot having the number of reads (per million) in the x-axis and the samples in the y-axis. In this way we can qualitatively asses a threshold for the necessary number of reads, valid for all samples, averaged across all gene transcripts (for each sample).
+
+
+```{r, include=TRUE}
+size_raw<-data.frame("sample"=colnames(clean_coding_raw),"read_millions"=colSums(clean_coding_raw/1000000))
 ggplot(data=size_raw, aes(sample,read_millions))+
   geom_bar(stat="identity", fill="grey50",colour="grey50", width=0.7, alpha=0.7) + coord_flip() + theme_bw()
 ```
+We are explicitly asked to filter raw counts data retaining only genes with a raw count > 20 in at least 5 Cases or 5 Control samples. To do so, we need to divide case samples from control samples and for each of them, we count how many times each gene has a number of reads greater than the threshold. Then we take the maximum between the counts. 
 
-```{r}
+
+```{r, include=TRUE}
 threshold<-20
 repl_thr<-5
-filter_vec <- apply(tmp2,1,
+filter_vec <- apply(clean_coding_raw,1,
     function(y) max(by(y, c_anno_df$condition, function(x) sum(x>=threshold))))
-# see statistics for the filtering
+# see statistics for the filtering: how many genes have that number of reads (greater than 20)
 table(filter_vec) 
-filter_counts_df <- clean_coding_raw[filter_vec>=repl_thr,]
-# check the dimension of the filtered matrix 
-dim(filter_counts_df) 
 ```
+In this way we can remove genes with low signal and filtered genes have at least 20 reads in at least 5 replicates/samples in case condition or control condition.
+
+```{r, include=TRUE}
+filter_counts_df <- clean_coding_raw[filter_vec>=repl_thr,]
+cat ("\nDimension: ", dim(filter_counts_df)) 
+```
+The dimension of the filtered dataset got even smaller, with 17539 genes as rows, so 4620 less. We have filtered the *r_anno_df* dataset as well to update the annotation corresponding to the filtered genes.
 
 ```{r}
 filter_anno_df <- r_anno_df[rownames(filter_counts_df),]
 dim(filter_anno_df)
-long_counts_df <- gather(filter_counts_df, key = "sample", value = "read_number")
+```
 
-# plot in log10 scale +1 to avoid infinite values
+In order to understand the distribution of the numbers of reads (each related to a gene transcript) per sample, we have produced a box and whiskers plot, using the *geom_boxplot()* function, considering the numbers of reads as continuous variables, that we had to scale in log10 + 1 to avoid infinite values when the number of reads are zero for any gene transcript of the considered replicate/sample.
+
+```{r}
+long_counts_df <- gather(filter_counts_df, key = "sample", value = "read_number")
 ggplot(data=long_counts_df,aes(sample,read_number+1)) +
    geom_boxplot(colour="indianred",fill="indianred",alpha=0.7) +
    theme_bw() +
@@ -86,57 +136,20 @@ ggplot(data=long_counts_df,aes(sample,read_number+1)) +
 
 ```
 
+Under the assumption of independent and identically distributed variables, and being the number of variables (gene transcripts) large enough and the distribution not wild, we can assume that the central limit theorem holds and normalization of the number of reads per sample can take place. First we need to create a DGEList, *edge_c*, which stands for Digital Gene Expression List, having as parameters *counts*, *samples*, *gene* and *group*, all the necessary information to proceed with the number of reads per sample normalization.
+ 
 ```{r}
-size_df <- data.frame("sample"=colnames(filter_counts_df),
-                    "read_millions"=colSums(filter_counts_df)/1000000)
-
-ggplot(data=size_df,aes(sample,read_millions)) +
-   geom_bar(stat="identity",fill="indianred",colour="indianred",width=0.7,alpha=0.7)+
-   coord_flip()+
-   theme_bw()
-```
-
-```{r}
-# scale for rows (each gene), to normalize for basal expression level differences
-clu_data <- scale(t(filter_counts_df))
-# distance matrix (we are clustering samples, not genes)
-dd <- dist(clu_data, method = "euclidean") 
-hc <- hclust(dd, method="ward.D")
-# display dendogram
-plot(hc) 
-
-## PCA analysis of samples
-data.matrix <- filter_counts_df
-#data.matrix_t = t(data.matrix)
-#ordered_matrix_t<- merge(c_anno_df, data.matrix_t, by.y = 'row.names', by.x = "sample")
-#sorted_ordered_matrix_t <- ordered_matrix_t[order(ordered_matrix_t$condition),]
-
-#color <- c(rep("red",50),rep("blue",50))
-color <- c(rep("red",100))
-color[grep('11A',colnames(data.matrix))]<-'blue'
-#row.names(sorted_ordered_matrix_t)= sorted_ordered_matrix_t$sample
-#matrix <- sorted_ordered_matrix_t[1:nrow( sorted_ordered_matrix_t),3:ncol(sorted_ordered_matrix_t)]
-
-
-data.PC <- prcomp(t(data.matrix),scale.=TRUE)
-plot(data.PC$x[,1:2],xlim=c(-200,200),ylim=c(-200,200),col=color,pch=19)
-text(data.PC$x[,1],data.PC$x[,2]+10,colnames(filter_counts_df),cex=0.7)
-```
-
-```{r}
-#c_anno_df_copy <- c_anno_df
-#c_anno_df <- c_anno_df[order(ordered_matrix_t$condition),]
-#f_matrix <- t(matrix)
 edge_c <- DGEList(counts=filter_counts_df,group=c_anno_df$condition,samples=c_anno_df,genes=filter_anno_df) 
-edge_c
+head(edge_c)
 ```
+
+We recall that TMM doesn't normalize the reads, but instead calculates normalization factors, since there can be compositional biases, where certain genes have much higher read counts due to technical reasons, and we do not want to use them when calculating the library size. Instead of using the total library size (the sum of the reads for all genes), TMM trims off the most highly variable genes (Trimmed mean of M-values, where M-values are the log fold change between each sample and a reference) and then calculates a normalization factor that is used to adjust the library size when we compute logCPM values with the function *cpm()*.
+We have used the *geom_boxplot()* function again to visually check if the bar plots of the normalized distribution of the numbers of reads were more aligned, as expected.
 
 ```{r}
 edge_n <- calcNormFactors(edge_c,method="TMM")
-edge_n
-```
+head(edge_n)
 
-```{r}
 cpm_table <- as.data.frame(round(cpm(edge_n),2))
 head(cpm_table)
 long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM") 
@@ -146,6 +159,7 @@ ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
    theme_bw()+
    scale_y_log10() 
 ```
+We have then applied unsupervised methods to gather preliminary information about the possibility of distinction between case and control samples, by applying hierarchical clustering with Ward's minimum variance criterion to the distance matrix, which results in the dendogram *hc*.
 
 ```{r}
 clu_data <- t(scale(t(cpm_table))) 
@@ -154,48 +168,81 @@ hc <- hclust(dd, method="ward.D")
 plot(hc) 
 ```
 
+
+We have also performed Principal Component Analysis.
+
 ```{r}
 data.matrix <- cpm_table
-color <- c(rep("red",100))
-color[grep('11A',colnames(data.matrix))]<-'blue'
+color <- c(rep("red",100)) # case samples
+color[grep('11A',colnames(data.matrix))]<-'blue' # control samples
 data.PC <- prcomp(t(data.matrix),scale.=TRUE)
 plot(data.PC$x[,1:2],xlim=c(-200,200),ylim=c(-200,200),col=color,pch=19)
 text(data.PC$x[,1],data.PC$x[,2]+10,colnames(filter_counts_df),cex=0.7)
 ```
+We can clearly see that the two clusters have been identified and separated (with a slight overlap at their central border).
+
+Linear modeling and differential expression analysis in edgeR requires a design matrix to be specified. The design matrix records which treatment conditions were applied to each samples, and it also defines how the experimental effects are parametrized in the linear models.This design matrix simply links each group to the samples that belong to it. Each row of the design matrix corresponds to a sample whereas each column represents a coefficient corresponding to one of the 2 groups. 
 
 ```{r}
 design <- model.matrix(~0+group, data=edge_n$samples)
 colnames(design) <- levels(edge_n$samples$group)
 rownames(design) <- edge_n$samples$sample
-design
+head(design)
 ```
+edgeR uses the negative binomial (NB) distribution to model the read counts for each gene in each sample. he dispersion parameter of the NB distribution accounts for variability between biological replicates. The NB model can be extended with quasi-likelihood (QL) methods to account for gene-specific variability from both biological and technical sources.  Under the QL framework, the NB dispersion trend is used to describe the overall biological variability across all genes, and gene-specific variability above and below the overall level is picked up by the QL dispersion. The estimation of QL dispersions is performed using the *glmQLFit()* function.
 
 ```{r}
 # calculate dispersion and fit with edgeR (necessary for differential expression analysis)
 edge_d <- estimateDisp(edge_n,design)
 edge_f <- glmQLFit(edge_d,design) 
 ```
-
+The next step is to test for differential expression between the experimental groups.  The contrast corresponding to any specified comparison can be constructed conveniently using the *makeContrasts()* function:
 ```{r}
 contro <- makeContrasts("case-control", levels=design) 
 ```
+
+For example, in case samples, A positive log2-fold-change (logFC) will indicate a gene up-regulated, whereas a negative logFC will indicate a gene less expressed with respect with control samples. We will use QL F-tests as they give stricter error rate control by accounting for the uncertainty in dispersion estimation. The top DE genes can be viewed with *topTags()*. We have set a p-value cutoff of 0.01, a log fold change ratio > 1.5 for up-regulated genes and < -1.5 for down-regulated genes and a logCPM >1.
 
 ```{r}
 # fit the model with generalized linear models
 edge_t <- glmQLFTest(edge_f,contrast=contro)
 DEGs <- as.data.frame(topTags(edge_t,n=20,p.value = 0.01,sort.by = "logFC"))
-DEGs <- as.data.frame(topTags(edge_t,n=20000))
+DEGs <- as.data.frame(topTags(edge_t, n=20000))
 DEGs$class <- "="
-DEGs$class[which(DEGs$logCPM>1&DEGs$logFC>1.5&DEGs$FDR<0.01)] = "+"
-DEGs$class[which(DEGs$logCPM>1&DEGs$logFC<(-1.5)&DEGs$FDR<0.01)] = "-"
+DEGs$class[which(DEGs$logCPM>1&DEGs$logFC>(1.5)&DEGs$FDR<0.01)] <- "+"
+DEGs$class[which(DEGs$logCPM>1&DEGs$logFC<(-1.5)&DEGs$FDR<0.01)] <-  "-"
 DEGs <- DEGs[order(DEGs$logFC,decreasing = T),]
 
 head(DEGs)
 table(DEGs$class)
 ```
+We have decided not to relax the threshold since the number of up-regulated and down-regulated is enough to proceed with the analysis. We have decided to display both the volcano plot and the MA plot, since they can be compared on the basis of the shared log FC values, respectively on the y-axis and on the x-axis. The MA plot does not provide information about the magnitude of the pvalue, while the volcano plot does not include the information about average expression.
 
 ```{r}
-## Display an MA plot
+
+input_df <- DEGs
+xlabel <- "log2 FC case vs control"
+ylabel <- "-log10 p-value"
+par(fig=c(0,1,0,1), mar=c(4,4,1,2), mgp=c(2, 0.75, 0))	
+plot(input_df$logFC, -log10(input_df$PValue),xlab=xlabel, ylab=ylabel, 
+     col=ifelse(input_df$class =="=","grey70","olivedrab4"), pch=20, frame.plot=TRUE, cex=0.8, main="Volcano plot")
+abline(v=0,lty=2,col="grey20")
+
+# degs$diffexpressed <- "NO"
+# degs$diffexpressed[degs$logFC > 1.5] <- "UP"
+# degs$diffexpressed[degs$logFC < -1.5] <- "DOWN"
+# ggplot(data=degs, aes(x=logFC, y=-log10(PValue), col=diffexpressed, label="")) +
+#     geom_point() +
+#     theme_minimal() +
+#     scale_color_manual(values=c("blue", "black", "red")) +
+#     geom_vline(xintercept=c(-1.5, 1.5), col="red") +
+#     geom_hline(yintercept=-log10(0.01), col="red")
+# ggsave("volcano_plot.pdf",path="plots")
+myvolcanoplot <- ggplot(data = input_df, aes(x = input_df$logFC, y = -log10(input_df$PValue), col = input_df$class)) + 
+  geom_vline(xintercept = c(-1.5, 1.5), col = "gray", linetype = 'dashed') +
+  geom_hline(yintercept = -log10(0.01), col = "gray", linetype = 'dashed') + geom_point(size = 2) + scale_color_manual(values = c("#00AFBB", "grey", "#FFDB6D"), 
+labels = c("-", "=", "+"))
+
 input_df <- DEGs
 xlabel <- "log2 avg CPM (A)"
 ylabel <- "log2 FC case vs control (M)"
@@ -205,17 +252,8 @@ plot(input_df$logCPM, input_df$logFC, xlab=xlabel, ylab=ylabel,
 abline(h=0,lty=2,col="grey20")
 ```
 
-```{r}
-## Display a Volcano plot of the results:
-input_df <- DEGs
-xlabel <- "log2 FC case vs control"
-ylabel <- "-log10 p-value"
-par(fig=c(0,1,0,1), mar=c(4,4,1,2), mgp=c(2, 0.75, 0))	
-plot(input_df$logFC, -log(input_df$PValue,base=10),xlab=xlabel, ylab=ylabel, 
-     col=ifelse(input_df$class=="=","grey70","olivedrab4"), pch=20, frame.plot=TRUE, cex=0.8, main="Volcano plot")
-abline(v=0,lty=2,col="grey20")
 
-```
+
 
 ```{r}
 #data.matrix <- cpm_table
@@ -250,7 +288,6 @@ colnames(DEGs)[2] <- "external_gene_name"
 DEGs <- DEGs[which(!is.na(DEGs$entrezgene_id)),] #17741 vs 17355
 DEGs <- DEGs[-which(duplicated(DEGs$entrezgene_id)),] # 17275
 ```
-
 
 ```{r}
 ranks <- DEGs$logFC
@@ -314,6 +351,7 @@ heatplot(ego_BP_down,showCategory =10)
 x_BP_down<- pairwise_termsim(ego_BP_down)
 emapplot(x_BP_down,showCategory = 10)
 ```
+
 ```{r}
 ## Perform Gene Ontology enrichment analysis (Biological Process)
 ego_MF_up <- enrichGO(gene = upDEGs$external_gene_name,
@@ -398,6 +436,7 @@ kegg <- enrichKEGG(
 )
 head(kegg, n=10)
 ```
+
 ```{r}
 logFC_ex <- upDEGs$logFC
 names(logFC_ex) <- upDEGs$entrezgene_id
@@ -405,8 +444,6 @@ pathview(gene.data = logFC,
          pathway.id = 'hsa04110',
          species = "human")
 ```
-
-
 
 ```{r}
 ensembl <-useMart(biomart = 'ensembl', dataset = 'hsapiens_gene_ensembl')
@@ -425,7 +462,6 @@ report[report$p.value < 0.05]
 plot(report[1:5], fontsize = 7, id.fontsize=5)
 
 ```
-
 
 ```{r}
 TF <- report$target[2]
