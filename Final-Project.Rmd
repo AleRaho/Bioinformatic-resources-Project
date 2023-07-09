@@ -30,7 +30,8 @@ We have chosen the RNA-seq count data extracted from the lung squamous cell carc
 **1. Load the RData file.**
 
 ```{r, include=TRUE} 
-path <- getwd() load(paste(path, "/Lung_squamous_cell_carcinoma.RData", sep=""))`
+path <- getwd() 
+load(paste(path, "/Lung_squamous_cell_carcinoma.RData", sep=""))
 ```
 We can see that three different data-frames have been uploaded. Let us inspect them separately.
 
@@ -108,7 +109,7 @@ We are explicitly asked to filter raw counts data retaining only genes with a ra
 threshold<-20
 repl_thr<-5
 filter_vec <- apply(clean_coding_raw,1,
-    function(y) max(by(y, c_anno_df$condition, function(x) sum(x>=threshold))))
+    function(y) min(by(y, c_anno_df$condition, function(x) sum(x>threshold))))
 # see statistics for the filtering: how many genes have that number of reads (greater than 20)
 table(filter_vec) 
 ```
