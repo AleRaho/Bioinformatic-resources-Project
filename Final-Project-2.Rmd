@@ -863,12 +863,14 @@ PPI_graph_DE_200 <- rba_string_network_image(ids=all_de_STRING$external_gene_nam
 PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:2000], image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
+![STRING PPI interactions' network for the first 2000 up and down-regulated genes (ordered by p-value).](rbioapi/2000_updown.png)
+
 **10. Import the network in R and use *igraph* to identify and plot the largest connected component**
 
-If we used the web interface to get the PPI interactions' networks, we would have to export the corresponding TSV files and thena reload them into RStudio. Instead, we have decided to employ the function *rba_string_interactions_network()* from *rbioapi* to get the PPI interactions network information as it is contained in the TSV files exportable from the STRING web interface. We are going to use both methods for the reduced up-regulated genes' subset to verify that their results are consistent (the same). If so, we will perform the LC identification only with the *rbioapi* package, since it is quicker.
+If we used the web interface to get the PPI interactions' networks, we would have to export the corresponding TSV files and then reload them into RStudio. Instead, we have decided to employ the function *rba_string_interactions_network()* from *rbioapi* to get the PPI interactions network information as it is contained in the TSV files (exportable from the STRING web interface). We are going to use both methods for the reduced up-regulated genes' subset to verify that their results are consistent (the same). If so, we will perform the LCC (Largest Connected Component) identification only with the *rbioapi* package, since it is quicker.
 
 ```{r}
-# Alternative to tsv file upload
+# Alternative to tsv file upload (rbioapi)
 PPI_net_up <- rba_string_interactions_network(ids=upreg_STRING$external_gene_name[1:100], species=9606, required_score = 400)
 
 # Deleting duplicate rows (for undirected edges)
@@ -876,7 +878,7 @@ PPI_net_up <- distinct(PPI_net_up)
 # formatting output to match igraph constraints
 PPI_net_up <- PPI_net_up[, -c(1,2)] 
 
-# tsv file upload
+# tsv file upload (for consistency)
 PPI_tsv_up <-  read.delim("100_upreg_STRING_PPI_interactions.tsv")
 
 ```
