@@ -26,6 +26,7 @@ library("igraph")
 library("statmod")
 library("devtools")
 library("rbioapi")
+library("rgl")
 ```
 
 We have chosen the RNA-seq count data extracted from the lung squamous cell carcinoma dataset, knowing that from the original TCGA data 50 cases (tumor samples) and 50 controls (normal samples) were randomly selected.
@@ -870,72 +871,115 @@ PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_na
 If we used the web interface to get the PPI interactions' networks, we would have to export the corresponding TSV files and then reload them into RStudio. Instead, we have decided to employ the function *rba_string_interactions_network()* from *rbioapi* to get the PPI interactions network information as it is contained in the TSV files (exportable from the STRING web interface). We are going to use both methods for the reduced up-regulated genes' subset to verify that their results are consistent (the same). If so, we will perform the LCC (Largest Connected Component) identification only with the *rbioapi* package, since it is quicker.
 
 ```{r}
-# Alternative to tsv file upload (rbioapi)
-PPI_net_up <- rba_string_interactions_network(ids=upreg_STRING$external_gene_name[1:100], species=9606, required_score = 400)
+# Alternative to tsv file upload (rbioapi) 
+PPI_net_up <- rba_string_interactions_network(ids=upreg_STRING$external_gene_name[1:100], species=9606, required_score = 400) # function called in date: 13/01/2024 at 11:06
 
 # Deleting duplicate rows (for undirected edges)
 PPI_net_up <- distinct(PPI_net_up)
 # formatting output to match igraph constraints
-PPI_net_up <- PPI_net_up[, -c(1,2)] 
+PPI_net_up <- PPI_net_up[, -c(1,2)]
 
-# tsv file upload (for consistency)
-PPI_tsv_up <-  read.delim("100_upreg_STRING_PPI_interactions.tsv")
+# tsv file upload (for consistency check)
+PPI_tsv_up <-  read.delim("100_upreg_STRING_PPI_interactions.tsv") # file downloaded in date: 13/01/2024 at 11:06
+
+# PPI network comparison
+
+# ordering gene pairs (rbioapi) 
+PPI_net_up <- transform(PPI_net_up, preferredName_A = pmin(preferredName_A, preferredName_B), preferredName_B=pmax(preferredName_A, preferredName_B))
+# ordering alphabetically by first column
+PPI_net_up <- PPI_net_up[order(PPI_net_up$preferredName_A),]
+# resetting row names 
+rownames(PPI_net_up) <- 1:nrow(PPI_net_up)  
+
+# ordering gene pairs (tsv file)
+PPI_tsv_up <- transform(PPI_tsv_up, X.node1 = pmin(X.node1, node2), node2=pmax(X.node1, node2))
+# ordering alphabetically by first column
+PPI_tsv_up <- PPI_tsv_up[order(PPI_tsv_up$X.node1),]
+# resetting row names 
+rownames(PPI_tsv_up) <- 1:nrow(PPI_tsv_up)
+
+identical(PPI_net_up$preferredName_A, PPI_tsv_up$X.node1) # TRUE in date: 13/01/2024 at 11:06
+identical(PPI_net_up$preferredName_B, PPI_tsv_up$node2) # TRUE in date: 13/01/2024 at 11:06
 
 ```
-
-We have designed the find_largest_component function that is able to generate a graph and identify it's largest connected component using genes interaction informations.
-
-```{r}
-find_largest_comp <- function(PPI_net){
-  #isolate unique gene names belonging to our data structure (grapg nodes)
-  gene_names <- unique(unlist(PPI_net[, c(1,2)]), use.names = FALSE)
-  #draw the graph
-  graph_from_PPI <- graph_from_data_frame(PPI_net,gene_names,directed=FALSE)
-  #find all connected components 
-  conn_comp <- components(graph_from_PPI, mode = "strong")
-  # find largest component
-  largest_comp <- which.max(conn_comp$csize)
-  # print largest component size ## 1676
-  print(conn_comp$csize[largest_comp])
-  # isolate largest component
-  lc <- induced_subgraph(graph_from_PPI,V(graph_from_PPI)[conn_comp$membership == largest_comp])
-  plot(lc,
-       # edge proportional to combined score
-       edge.width= E(lc)$combined_score*3,
-       vertex.color="red",
-       vertex.size=10,
-       vertex.frame.color="darkgray",
-       vertex.label.color="black",
-       vertex.label.cex=0.7,
-       edge.curved=0.1)
-}
-```
-
-We can now use the *find_largest_component()* function both on .tsv files and our *rbioapi* data
+We have verified that the PPI interactions' network produced by *rbioapi* and STRING web interface are the same (15/01/2024, 11:08), so we can proceed with the analysis using the first tool for all the gene lists.
 
 ```{r}
-find_largest_comp(PPI_tsv_up)
-find_largest_comp(PPI_net_up)
-```
 
-The result is consisten so we can apply the find_largest_component() function just to all the other PPI interactions networks in order to find meaningfull results.
-
-```{r}
-#Identify the largest component in the down-regulated genes graph
 PPI_net_down <- rba_string_interactions_network(ids=downreg_STRING$external_gene_name[1:100], species=9606, required_score = 400)
+# Deleting duplicate rows (for undirected edges)
 PPI_net_down <- distinct(PPI_net_down)
+# formatting output to match igraph constraints
 PPI_net_down <- PPI_net_down[, -c(1,2)]
-find_largest_comp(PPI_net_down)
 
-#Identify the largest component in the the top 200 genes graph
 PPI_net_DE_200 <- rba_string_interactions_network(ids=all_de_STRING$external_gene_name[1:200], species=9606, required_score = 400)
 PPI_net_DE_200 <- distinct(PPI_net_DE_200)
 PPI_net_DE_200 <- PPI_net_DE_200[, -c(1,2)]
-find_largest_comp(PPI_net_DE_200)
 
-#Identify the largest component in the the top 200 genes graph
 PPI_net_DE_2000 <- rba_string_interactions_network(ids=all_de_STRING$external_gene_name[1:2000], species=9606, required_score = 400)
 PPI_net_DE_2000 <- distinct(PPI_net_DE_2000)
 PPI_net_DE_2000 <- PPI_net_DE_2000[, -c(1,2)]
-find_largest_comp(PPI_net_DE_2000)
+
+```
+
+We have designed the *find_largest_conn_comp()* function that plots the LCC graph, following the steps explained in the code comments.
+
+```{r}
+
+find_largest_conn_comp <- function(PPI_net){
+  # isolate unique gene names from the node columns (of the PPI interactions network dataframe)
+  gene_names <- unique(unlist(PPI_net[, c(1,2)]), use.names = FALSE)
+  # get info from dataframe to generate corresponding igraph graph
+  graph_from_PPI <- graph_from_data_frame(PPI_net,gene_names,directed=FALSE)
+  # check if the graph is connected
+  cat("\n Is the graph connected? ", is_connected(graph_from_PPI))
+  # count how many (strongly) connected component are there in the graph
+  cat("\n How many (strongly) connected components are there? ", count_components(graph_from_PPI, mode = "strong"))
+  # find the maximal (strongly) connected components of the PPI graph (as clusters)
+  conn_comp <- components(graph_from_PPI, mode = "strong")
+  # extract largest connected component number (1, associated to largest cluster) 
+  # by csize parameter (numeric vector giving the sizes of the clusters)
+  largest_conn_comp <- which.max(conn_comp$csize)
+  cat("\n Largest connected component size: ", conn_comp$csize[largest_conn_comp])
+  # create subgraph of the original graph, by specifying vertices (with V() function)
+  # having value 1 in the membership parameter of components() output.
+  lcc <- induced_subgraph(graph_from_PPI, V(graph_from_PPI)[conn_comp$membership == largest_conn_comp])
+  # plot lcc subgraph
+  plot(lcc,
+       # edge thickness based on score values
+       edge.width= E(lcc)$score*3,
+       vertex.color="red",
+       vertex.size=5,
+       vertex.label.color="black",
+       vertex.label.cex=0.5,
+       edge.curved=0.1,
+       )
+  
+  # Alternative 3D plotting (considered experimental by igraph package authors)
+  # rglplot(lcc,
+  #      edge.width= E(lcc)$score*3,
+  #      vertex.color="red",
+  #      vertex.size=5,
+  #      vertex.label.color="black",
+  #      vertex.label.cex=0.5,
+  #      edge.curved=0.1
+  #      # rescale=FALSE
+  #      )
+}
+```
+
+We can now use the *find_largest_conn_comp()* function on all four PPI networks, starting from the up-regulated genes.
+
+```{r}
+#Identify and plot the largest connected component in the up-regulated genes PPI network
+find_largest_conn_comp(PPI_net_up)
+
+# Identify and plot the largest connected component in the down-regulated genes PPI network
+find_largest_conn_comp(PPI_net_down)
+
+# Identify and plot the largest connected component in the top 200 DE genes PPI network
+find_largest_conn_comp(PPI_net_DE_200)
+
+#Identify and plot the largest connected component in the top 2000 DE genes PPI network
+find_largest_conn_comp(PPI_net_DE_2000)
 ```
