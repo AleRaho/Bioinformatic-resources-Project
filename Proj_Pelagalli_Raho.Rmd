@@ -922,7 +922,7 @@ PPI_net_DE_2000 <- PPI_net_DE_2000[, -c(1,2)]
 
 ```
 
-We have designed the *find_largest_conn_comp()* function that plots the LCC graph, following the steps explained in the code comments.
+We have designed the *find_largest_conn_comp()* function that returns and plots (as a graph) the LCC, following the steps explained in the code comments.
 
 ```{r}
 
@@ -965,6 +965,7 @@ find_largest_conn_comp <- function(PPI_net){
   #      edge.curved=0.1
   #      # rescale=FALSE
   #      )
+  return(lcc)
 }
 ```
 
@@ -972,14 +973,14 @@ We can now use the *find_largest_conn_comp()* function on all four PPI networks,
 
 ```{r}
 #Identify and plot the largest connected component in the up-regulated genes PPI network
-find_largest_conn_comp(PPI_net_up)
+lcc_up_100 <- find_largest_conn_comp(PPI_net_up)
 
 # Identify and plot the largest connected component in the down-regulated genes PPI network
-find_largest_conn_comp(PPI_net_down)
+lcc_down_100 <- find_largest_conn_comp(PPI_net_down)
 
 # Identify and plot the largest connected component in the top 200 DE genes PPI network
-find_largest_conn_comp(PPI_net_DE_200)
+lcc_up_down_200 <- find_largest_conn_comp(PPI_net_DE_200)
 
 #Identify and plot the largest connected component in the top 2000 DE genes PPI network
-find_largest_conn_comp(PPI_net_DE_2000)
+lcc_up_down_2000 <- find_largest_conn_comp(PPI_net_DE_2000)
 ```
