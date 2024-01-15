@@ -5,7 +5,7 @@ date: "15/01/2024"
 output: pdf_document
 ---
 
-```{r setup, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library("ggplot2")
 library("biomaRt")
@@ -40,21 +40,21 @@ load(paste(path, "/Lung_squamous_cell_carcinoma.RData", sep=""))
 We can see that three different dataframes have been uploaded. Let us inspect them separately.
 
 ```{r, include=TRUE}
-head(raw_counts_df, 3)
+head(raw_counts_df, 2)
 cat("\nDimension: ", dim(raw_counts_df))
 ```
 
 The data-frame *raw_counts_df* represents the raw RNA-seq counts (sequence reads per gene/how many reads have mapped to each gene): the rows correspond to the Ensembl Gene IDs (ex: ENSG00000278704) and the columns to the tumor and normal samples from which the reads were counted for each gene (ex: TCGA-22-4609-01A). 62940 genes are included in the dataframe and 100 samples are taken into account, 50 cases and 50 controls, respectively.
 
 ```{r, include=TRUE}
-head(c_anno_df,10)
+head(c_anno_df, 5)
 cat("\nDimension: ", dim(c_anno_df))
 ```
 
 The dataframe *c_anno_df* specifies the condition (*condition* column) corresponding to each sample name (*sample* column), either "case" or "control". The number of rows (samples) is 100, properly matching the number of columns (samples) of *raw_counts_df*.
 
 ```{r, include=TRUE}
-head(r_anno_df,10)
+head(r_anno_df, 5)
 cat("\nDimension: ", dim(r_anno_df))
 ```
 
@@ -75,7 +75,7 @@ anno_query <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),
                    filters = ("ensembl_gene_id"), 
                    values = r_anno_df$ensembl_gene_id, 
                    mart = ensembl)
-head(anno_query)
+head(anno_query,5)
 cat("\nDimension: ", dim(anno_query))
 ```
 
@@ -84,7 +84,7 @@ All the genes that were recognized by *Ensembl* are now matched to their type so
 ```{r, include=TRUE}
 coding_query <- anno_query[which(anno_query$gene_biotype == "protein_coding"), ]
 cat("\nDimension: ", dim(coding_query))
-head(coding_query)
+head(coding_query,5)
 ```
 
 The number of genes has approximately become \~1/3 of the initial number of genes. After merging the *coding_query* result with the starting dataset, we have the updated version of the dataset, containing only protein coding genes (*clean_coding_raw*).
@@ -101,9 +101,11 @@ row.names(clean_coding_raw) <- coding_raw$ensembl_gene_id
 The dataset contains standard counts, so the number of reads $X_i$ for each gene transcript $i$ in $N$ given samples/replicates. We need to obtain the counts per million (CPM, *read_millions*), so we can check the library size of each sample. We have generated a bar plot having the number of reads (per million) in the x-axis and the samples in the y-axis. In this way, we can qualitatively asses a threshold for the necessary number of reads, valid for all samples, averaged across all gene transcripts (for each sample).
 
 ```{r, include=TRUE}
-size_raw <- data.frame("sample"=colnames(clean_coding_raw),"read_millions"=colSums(clean_coding_raw/1000000))
+size_raw <- data.frame("sample" = colnames(clean_coding_raw),
+                       "read_millions" = colSums(clean_coding_raw/1000000))
 ggplot(data=size_raw, aes(sample,read_millions))+
-  geom_bar(stat="identity", fill="grey50",colour="grey50", width=0.7, alpha=0.7) + coord_flip() + theme_bw()
+  geom_bar(stat="identity", fill="grey50",colour="grey50", width=0.7, alpha=0.7) + 
+  coord_flip() + theme_bw()
 ```
 
 We are explicitly asked to filter raw counts data retaining only genes with a raw count \> 20 in at least 5 Cases or 5 Control samples. To do so, thanks to *apply()*, we use the *by()* function on each row (gene) of the clean dataset (with only protein-coding genes) to divide case samples from control samples and sum only the number of case samples and control samples (separately), that record (for each gene) a number of reads greater than the threshold. So, for each gene, we have two numbers, respectively for case and control.
@@ -143,13 +145,15 @@ repl_thr<- 5
 ct_min <-table(filter_vec_min)
 ct_min
 ct_min_df <- as.data.frame(ct_min)
-cat("\nNumber of genes with 5 or more samples (case or control) with a number of reads > 20 (min): ", sum(ct_min_df[ct_min_df$filter_vec_min[repl_thr+1:51],2], na.rm = TRUE))
+cat("\nNumber of genes with 5 or more samples (case or control) with a number of reads > 20 (min): ",
+    sum(ct_min_df[ct_min_df$filter_vec_min[repl_thr+1:51],2], na.rm = TRUE))
 cat("\n")
 
 ct_max <-table(filter_vec_max)
 ct_max
 ct_max_df <- as.data.frame(ct_max)
-cat("\nNumber of genes with 5 or more samples (case or control) with a number of reads > 20 (max): ", sum(ct_max_df[ct_max_df$filter_vec_max[repl_thr+1:51],2],na.rm = TRUE))
+cat("\nNumber of genes with 5 or more samples (case or control) with a number of reads > 20 (max): ", 
+    sum(ct_max_df[ct_max_df$filter_vec_max[repl_thr+1:51],2],na.rm = TRUE))
 cat("\n")
 ```
 
@@ -183,8 +187,9 @@ Under the assumption of independent and identically distributed variables, and b
 First we need to create a DGEList, *edge_c*, which stands for Digital Gene Expression List, having as parameters *counts*, *samples*, *gene* and *group*, all the necessary information to proceed with the number of reads per sample normalization.
 
 ```{r}
-edge_c <- DGEList(counts=filter_counts_df,group=c_anno_df$condition,samples=c_anno_df,genes=filter_anno_df) 
-head(edge_c)
+edge_c <- DGEList(counts=filter_counts_df,group=c_anno_df$condition,
+                  samples=c_anno_df,genes=filter_anno_df) 
+head(edge_c,2)
 ```
 
 We recall that TMM doesn't normalize the reads, but instead calculates normalization factors, since there can be composition biases, where certain genes have much higher read counts due to technical reasons, and we do not want to use them when calculating the library size.
@@ -193,10 +198,10 @@ Instead of using the total library size (the sum of the reads for all genes), TM
 
 ```{r}
 edge_n <- calcNormFactors(edge_c,method="TMM")
-head(edge_n)
+head(edge_n,2)
 
 cpm_table <- as.data.frame(round(cpm(edge_n),2))
-head(cpm_table)
+head(cpm_table,2)
 long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM") 
 
 ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
@@ -209,14 +214,16 @@ In order to verify that the normalization process worked, we have checked the va
 
 ```{r}
 # Which values in cpm_table are greater than 0.25? 
-# (As a general rule, a good threshold can be chosen by identifying the CPM that corresponds to a count of 10)
+# (As a general rule, a good threshold can be chosen by identifying the CPM 
+# that corresponds to a count of 10)
 thresh <- cpm_table > 0.25
 # This produces a logical matrix with TRUEs and FALSEs
-head(thresh)
+head(thresh,2)
 # Summary of how many TRUEs there are in each row
 # There are 13036 genes that have TRUEs in all 100 samples.
 table(rowSums(thresh))
-# Let's have a look and see whether our threshold of 0.25 does indeed correspond to a count of about 10-15
+# Let's have a look and see whether our threshold of 0.25 does indeed correspond 
+# to a count of about 10-15
 # We will look at the first sample
 plot(cpm_table[,1],filter_counts_df[,1])
 # Let us limit the x and y-axis so we can actually look to see what is happening at the smaller counts
@@ -261,7 +268,7 @@ Linear modeling and differential expression analysis in *edgeR* requires a desig
 design <- model.matrix(~0+group, data=edge_n$samples)
 colnames(design) <- levels(edge_n$samples$group)
 rownames(design) <- edge_n$samples$sample
-head(design)
+head(design,5)
 ```
 
 As explained by Chen et al. (2016, doi: 10.12688/f1000research.8987.2):
@@ -284,7 +291,7 @@ The NB dispersions tend to be higher for genes with very low counts. The dispers
 
 ```{r}
 edge_f <- glmQLFit(edge_d,design) #robust=TRUE
-head(edge_f$coefficients)
+head(edge_f$coefficients,5)
 summary(edge_f$df.prior)
 #visualization of QL dispersion
 plotQLDisp(edge_f)
@@ -305,7 +312,7 @@ For example, a positive log2-fold-change (logFC) will indicate an up-regulated g
 # fit the model with generalized linear models
 edge_t <- glmQLFTest(edge_f,contrast=contro)
 # ordered by p-value
-topTags(edge_t)
+topTags(edge_t,5)
 is.de <- decideTestsDGE(edge_t)
 summary(is.de)
 ```
@@ -314,7 +321,7 @@ The top DE gene SLC2A1 has a large positive logFC, showing that it is far more h
 
 ```{r}
 degs_example <- as.data.frame(topTags(edge_t,n=20, p.value = 0.01,sort.by = "logFC"))
-degs_example
+head(degs_example,5)
 ```
 
 If we look at the results, sorting by logFC, the top DE gene is MAGEA9B, which is know to be expressed in many tumors of several types, including melanoma, head and neck squamous cell carcinoma, lung carcinoma and breast carcinoma,but not in normal tissues (genecards.org).
@@ -336,7 +343,7 @@ DEGs_clean$class <- "="
 DEGs_clean$class[which(DEGs_clean$logCPM>1&DEGs_clean$logFC>(1.5)&DEGs_clean$FDR<0.01)] <- "+"
 DEGs_clean$class[which(DEGs_clean$logCPM>1&DEGs_clean$logFC<(-1.5)&DEGs_clean$FDR<0.01)] <-  "-"
 DEGs_clean <- DEGs_clean[order(DEGs_clean$logFC,decreasing = T),]
-head(DEGs_clean)
+head(DEGs_clean,5)
 table(DEGs_clean$class)
 ```
 
@@ -381,9 +388,13 @@ pal <- colorRampPalette(pal)(100)
 
 # Heatmap representing all DE genes
 
-heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs_clean$ensembl_gene_id[which(DEGs_clean$class!="=")]),]), ColSideColors = cols,cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2, Rowv = TRUE)
-legend("topright", legend=c("lowest", "middle", "highest"), fill = c("black", "grey", "white"), cex = 0.8, title="DE genes \n (scaled \n CPM counts)")
-legend("bottomright", legend=c("case", "control"), fill = c("chartreuse4", "pink"), cex = 0.8, title="Samples")
+heatmap(as.matrix(cpm_table[which(rownames(cpm_table) %in% 
+        DEGs_clean$ensembl_gene_id[which(DEGs_clean$class!="=")]),]), ColSideColors = cols,
+        cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2, Rowv = TRUE)
+legend("topright", legend=c("lowest", "middle", "highest"), fill = c("black", "grey", "white"), 
+       cex = 0.8, title="DE genes \n (scaled \n CPM counts)")
+legend("bottomright", legend=c("case", "control"), fill = c("chartreuse4", "pink"), 
+       cex = 0.8, title="Samples")
 ```
 
 We note that the *Colv* parameter has its default value, so the column dendogram is reordered and a control sample gets included in a cluster belonging to the case side. Moreover, we cannot actually verify that the heatmap is properly constructed, due to the high number of genes. So, we have decided to make a reduced version of this heatmap, focusing only on the top 20 differentially expressed genes, 10 from the up-regulated subset and 10 from the down-regulated subset, respectively. First, we subset the DEGs dataset into two different ones (*upreg_df* and *downreg_df*), respectively for up and down-regulated genes. Second, we order them according to logFC (from maximum positive to minimum positive value for up-regulated genes, from minimum negative to maximum negative for down-regulated genes). Then, we have to order the samples of *c_anno_df* to split case and control as two subgroups. We have selected the top 10 DE genes (by *ensembl_gene_id*) from *upreg_df* and *downreg_df*, respectively. In order to properly configure the heatmap matrix, we had to sort the *cpm_table* columns (samples), matching the two subgroups (case-control) of *ordered_c_anno_df*. Finally, we have displayed the reduced version of the heatmap, replacing ensemble gene IDs with gene names.
@@ -402,20 +413,27 @@ ordered_c_anno_df <- c_anno_df
 ordered_c_anno_df$condition <- as.character(ordered_c_anno_df$condition)
 ordered_c_anno_df <- ordered_c_anno_df[with(ordered_c_anno_df, order(condition)), ] 
 
-# Heatmap representing the top 20 differentially expressed genes 10 from the up-regulated subset and 10 from the down-regulated sub-set
+# Heatmap representing the top 20 differentially expressed genes 
+# 10 from the up-regulated subset and 10 from the down-regulated sub-set
 
-heatmap_sub_matrix <- as.matrix(cpm_table[rbind(head(upreg_df, 10), head(downreg_df, 10))$ensembl_gene_id,])[, ordered_c_anno_df$sample]
+heatmap_sub_matrix <- as.matrix(cpm_table[rbind(head(upreg_df, 10), 
+                      head(downreg_df, 10))$ensembl_gene_id,])[, ordered_c_anno_df$sample]
 heatmap_sub_matrix <- as.data.frame(heatmap_sub_matrix)
 # Substitute ensembl_gene_id with external_gene_name
 genename_sub_heatmap <- merge(DEGs_clean, heatmap_sub_matrix, by="row.names")
-genename_sub_heatmap <- subset(genename_sub_heatmap, select = -c(length, logFC, logCPM, F, PValue, FDR, class, ensembl_gene_id, Row.names))
+genename_sub_heatmap <- subset(genename_sub_heatmap, select = -c(length, logFC, logCPM, F,
+                        PValue, FDR, class, ensembl_gene_id, Row.names))
 row.names(genename_sub_heatmap) <-genename_sub_heatmap$external_gene_name
 genename_sub_heatmap <- subset(genename_sub_heatmap, select = -c(external_gene_name))
 
 cols <- c(rep("chartreuse4",50),rep('pink',50))
-heatmap(as.matrix(genename_sub_heatmap), ColSideColors = cols, cexCol = 2,margins = c(2,13),col = pal, cexRow = 1, Colv = NA, Rowv = TRUE, xlab = "Samples", labCol = FALSE)
-legend("topright", legend=c("lowest", "middle", "highest"), fill = c("black", "grey", "white"), cex = 0.8, title="DE genes \n (scaled CPM counts)")
-legend("bottomright", legend=c("case", "control"), fill = c("chartreuse4", "pink"), cex = 0.8, title="Samples")
+heatmap(as.matrix(genename_sub_heatmap), ColSideColors = cols, cexCol = 2,
+        margins = c(2,13),col = pal, cexRow = 1, Colv = NA, Rowv = TRUE,
+        xlab = "Samples", labCol = FALSE)
+legend("topright", legend=c("lowest", "middle", "highest"), fill = c("black", "grey", "white"),
+       cex = 0.8, title="DE genes \n (scaled CPM counts)")
+legend("bottomright", legend=c("case", "control"), fill = c("chartreuse4", "pink"),
+       cex = 0.8, title="Samples")
 ```
 
 By looking at this heatmap, we can clearly distinguish the up-regulated from the down-regulated genes. For example, SFTPC and AGER genes have higher CPM counts in the control samples, confirming their down-regulation from the DE analysis. Also, genes belonging to the 'MAGE' family, found to be up-regulated, have higher CPM counts in the case samples with respect to control ones. For the latter case, we have found biological validation from literature (Hoang & Landi, 2022, <https://doi.org/10.3390/cancers14040961>).
@@ -559,10 +577,12 @@ ranks <- DEGs_entrez[, c("logFC","class")]
 # associated each Entrez ID to the corresponding logFC
 row.names(ranks) <- DEGs_entrez$entrezgene_id
 ranks <- ranks[order(-ranks$logFC),]
-head(ranks)
-class_cols <- c(rep("red", sum(ranks$class == "+")),rep("black", sum(ranks$class == "=")), rep("blue", sum(ranks$class == "-")))
+head(ranks,5)
+class_cols <- c(rep("red", sum(ranks$class == "+")),rep("black", sum(ranks$class == "=")),
+                rep("blue", sum(ranks$class == "-")))
 
-barplot(height = ranks$logFC, names = rownames(ranks), col=class_cols, xlab = "Entrez gene IDS", ylab = "logFC", border=NA)
+barplot(height = ranks$logFC, names = rownames(ranks), col=class_cols, 
+        xlab = "Entrez gene IDS", ylab = "logFC", border=NA)
 abline(h=min(ranks$logFC[ranks$class == "+"]),lty=2,col="grey20")
 abline(h=max(ranks$logFC[ranks$class == "-"]),lty=2,col="grey20")
 legend(10000, 10, legend=c("-", "+", "="),
@@ -585,7 +605,7 @@ eWP_up = enrichWP(gene = upreg_df_entrez$entrezgene_id,
                   organism = "Homo sapiens",
                   pvalueCutoff = 0.05,
                   qvalueCutoff = 0.05)
-head(eWP_up, n=10)
+head(eWP_up, n=5)
 ```
 
 It is interesting to note that Cell cycle and DNA replication are the top2 and top3 WP pathways, in agreement with the GO enrichment analysis on the up-regulated genes. Even though many types of cancer-related pathways are detected, they are not directly linked to lung. However, taking into account the possibility of tumor progression and metastasis, the involvement of other tissues is not to be a-priori excluded.
@@ -595,7 +615,7 @@ eWP_down = enrichWP(gene = downreg_df_entrez$entrezgene_id,
                   organism = "Homo sapiens",
                   pvalueCutoff = 0.05,
                   qvalueCutoff = 0.05)
-head(eWP_down, n=10)
+head(eWP_down, n=5)
 ```
 
 The WP Complement system (top1) is linked to immune system and, along with coagulation (top4), is also present in the GO enrichment analysis for down-regulated genes.
@@ -612,7 +632,7 @@ upkegg <- enrichKEGG(gene = upreg_df_entrez$entrezgene_id,
                      pvalueCutoff = 0.05,
                      qvalueCutoff = 0.05,
                      use_internal_data = FALSE)
-head(upkegg, n=10)
+head(upkegg, n=5)
 
 downkegg <- enrichKEGG(gene = downreg_df_entrez$entrezgene_id,
                        organism = 'human',
@@ -623,7 +643,7 @@ downkegg <- enrichKEGG(gene = downreg_df_entrez$entrezgene_id,
                        pvalueCutoff = 0.05,
                        qvalueCutoff = 0.05,
                        use_internal_data = FALSE)
-head(downkegg, n=10)
+head(downkegg, n=5)
 ```
 
 KEGG enrichment looks more consistent for the up-regulated genes than for the down-regulated genes, given the presence of many heterogeneous diseases, not necessarily related to cancer.
@@ -642,7 +662,7 @@ pT <- pathview(gene.data = logFC,
          kegg.native = T,
          same.layer = F)
 
-head(pT$plot.data.gene)
+head(pT$plot.data.gene,5)
 str(pT)
 
 
@@ -658,7 +678,7 @@ pF <- pathview(gene.data = logFC,
          same.layer = F
 )
 
-head(pF$plot.data.gene)
+head(pF$plot.data.gene,5)
 str(pF)
 
 ```
@@ -682,7 +702,8 @@ promoter_seq <- getSequence(id = upreg_df_entrez$ensembl_gene_id,
                             mart = ensembl
 )
 
-# Transform each gene flank into a DNA String object for efficient storage and manipulation of long DNA sequences
+# Transform each gene flank into a DNA String object for efficient storage 
+# and manipulation of long DNA sequences
 sequences <- lapply(promoter_seq$gene_flank, function(x) DNAString(x))
 
 data("PWMLogn.hg19.MotifDb.Hsap")
@@ -714,14 +735,17 @@ The function *motifEcdf()* computes the empirical cumulative distribution functi
 
 ```{r}
 
-# calculate empirical score distributions for the JUND motifs (# compute the empirical distributions of scores for all the detected PWMs) against all genome promoters (of different lengths)
+# calculate empirical score distributions for the JUND motifs 
+# (compute the empirical distributions of scores for all the detected PWMs) 
+# against all genome promoters (of different lengths)
 ecdf <- motifEcdf(PWM,organism = "hg19",quick=TRUE)
 
 # calculate empirical score distribution for the JUND motifs against our set of promoters (background)
-#  if raw.scores=TRUE, returns a list of raw score values (before cutoff)
+# if raw.scores=TRUE, returns a list of raw score values (before cutoff)
 scores <- motifScores(sequences, PWM, raw.scores = T, verbose=T)
 
-# compute threshold cutoff on the empirical score distributions for all the PWS (against all genome promoters)
+# compute threshold cutoff on the empirical score distributions for all the PWS 
+# (against all genome promoters)
 threshold <- lapply(ecdf, function(x) quantile(x, 0.9975))
 
 ```
@@ -775,27 +799,33 @@ We are supposed to upload the generated *txt* files on the STRING web interface.
 First we get the PNG images of the PPI interactions' networks through the function *rba_string_network_image*, to have a qualitative assessment of the results.
 
 ```{r}
-# PNG images of the PPI interactions output networks from STRING corresponding to up-regulated (first 100), down-regulated (first 100), all DE (first 200 and 2000) lists. We chose to cut the lists for readability purposes and STRINGdb constraints.
+# PNG images of the PPI interactions output networks from STRING corresponding to 
+# up-regulated (first 100), down-regulated (first 100), all DE (first 200 and 2000) lists. 
+# We chose to cut the lists for readability purposes and STRINGdb constraints.
 
-PPI_graph_up <- rba_string_network_image(ids=upreg_STRING$external_gene_name[1:100], image_format = "image", species = 9606, network_flavor = "evidence")
+PPI_graph_up <- rba_string_network_image(ids=upreg_STRING$external_gene_name[1:100],
+                image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
 ![STRING PPI interactions' network for the first 100 up-regulated genes.](rbioapi/100_up_net.png)
 
 ```{r}
-PPI_graph_down <- rba_string_network_image(ids=downreg_STRING$external_gene_name[1:100], image_format = "image", species = 9606, network_flavor = "evidence")
+PPI_graph_down <- rba_string_network_image(ids=downreg_STRING$external_gene_name[1:100], 
+                  image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
 ![STRING PPI interactions' network for the first 100 down-regulated genes.](rbioapi/100_down_net.png)
 
 ```{r}
-PPI_graph_DE_200 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:200], image_format = "image", species = 9606, network_flavor = "evidence")
+PPI_graph_DE_200 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:200], 
+                    image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
 ![STRING PPI interactions' network for the first 200 up and down-regulated genes (according to p-value).](rbioapi/200_updown_net.png)
 
 ```{r}
-PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:2000], image_format = "image", species = 9606, network_flavor = "evidence")
+PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:2000], 
+                     image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
 ![STRING PPI interactions' network for the first 2000 up and down-regulated genes (ordered by p-value).](rbioapi/2000_updown.png)
@@ -806,7 +836,9 @@ If we used the web interface to get the PPI interactions' networks, we would hav
 
 ```{r}
 # Alternative to tsv file upload (rbioapi) 
-PPI_net_up <- rba_string_interactions_network(ids=upreg_STRING$external_gene_name[1:100], species=9606, required_score = 400) # function called in date: 13/01/2024 at 11:06
+PPI_net_up <- rba_string_interactions_network(ids=upreg_STRING$external_gene_name[1:100], 
+              species=9606, required_score = 400) 
+# function called in date: 13/01/2024 at 11:06
 
 # Deleting duplicate rows (for undirected edges)
 PPI_net_up <- distinct(PPI_net_up)
@@ -814,12 +846,14 @@ PPI_net_up <- distinct(PPI_net_up)
 PPI_net_up <- PPI_net_up[, -c(1,2)]
 
 # tsv file upload (for consistency check)
-PPI_tsv_up <-  read.delim("100_upreg_STRING_PPI_interactions.tsv") # file downloaded in date: 13/01/2024 at 11:06
+PPI_tsv_up <-  read.delim("100_upreg_STRING_PPI_interactions.tsv") 
+# file downloaded in date: 13/01/2024 at 11:06
 
 # PPI network comparison
 
 # ordering gene pairs (rbioapi) 
-PPI_net_up <- transform(PPI_net_up, preferredName_A = pmin(preferredName_A, preferredName_B), preferredName_B=pmax(preferredName_A, preferredName_B))
+PPI_net_up <- transform(PPI_net_up, preferredName_A = pmin(preferredName_A, preferredName_B), 
+                        preferredName_B=pmax(preferredName_A, preferredName_B))
 # ordering alphabetically by first column
 PPI_net_up <- PPI_net_up[order(PPI_net_up$preferredName_A),]
 # resetting row names 
@@ -841,17 +875,20 @@ We have verified that the PPI interactions' network produced by *rbioapi* and ST
 
 ```{r}
 
-PPI_net_down <- rba_string_interactions_network(ids=downreg_STRING$external_gene_name[1:100], species=9606, required_score = 400)
+PPI_net_down <- rba_string_interactions_network(ids=downreg_STRING$external_gene_name[1:100], 
+                species=9606, required_score = 400)
 # Deleting duplicate rows (for undirected edges)
 PPI_net_down <- distinct(PPI_net_down)
 # formatting output to match igraph constraints
 PPI_net_down <- PPI_net_down[, -c(1,2)]
 
-PPI_net_DE_200 <- rba_string_interactions_network(ids=all_de_STRING$external_gene_name[1:200], species=9606, required_score = 400)
+PPI_net_DE_200 <- rba_string_interactions_network(ids=all_de_STRING$external_gene_name[1:200], 
+                  species=9606, required_score = 400)
 PPI_net_DE_200 <- distinct(PPI_net_DE_200)
 PPI_net_DE_200 <- PPI_net_DE_200[, -c(1,2)]
 
-PPI_net_DE_2000 <- rba_string_interactions_network(ids=all_de_STRING$external_gene_name[1:2000], species=9606, required_score = 400)
+PPI_net_DE_2000 <- rba_string_interactions_network(ids=all_de_STRING$external_gene_name[1:2000], 
+                   species=9606, required_score = 400)
 PPI_net_DE_2000 <- distinct(PPI_net_DE_2000)
 PPI_net_DE_2000 <- PPI_net_DE_2000[, -c(1,2)]
 
@@ -869,7 +906,8 @@ find_largest_conn_comp <- function(PPI_net){
   # check if the graph is connected
   cat("\n Is the graph connected? ", is_connected(graph_from_PPI))
   # count how many (strongly) connected component are there in the graph
-  cat("\n How many (strongly) connected components are there? ", count_components(graph_from_PPI, mode = "strong"))
+  cat("\n How many (strongly) connected components are there? ", 
+      count_components(graph_from_PPI, mode = "strong"))
   # find the maximal (strongly) connected components of the PPI graph (as clusters)
   conn_comp <- components(graph_from_PPI, mode = "strong")
   # extract largest connected component number (1, associated to largest cluster) 
@@ -878,7 +916,8 @@ find_largest_conn_comp <- function(PPI_net){
   cat("\n Largest connected component size: ", conn_comp$csize[largest_conn_comp])
   # create subgraph of the original graph, by specifying vertices (with V() function)
   # having value 1 in the membership parameter of components() output.
-  lcc <- induced_subgraph(graph_from_PPI, V(graph_from_PPI)[conn_comp$membership == largest_conn_comp])
+  lcc <- induced_subgraph(graph_from_PPI, 
+         V(graph_from_PPI)[conn_comp$membership == largest_conn_comp])
   # plot lcc subgraph
   plot(lcc,
        # edge thickness based on score values
