@@ -32,28 +32,28 @@ We have chosen the RNA-seq count data extracted from the lung squamous cell carc
 
 **1. Load the RData file.**
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 path <- getwd() 
 load(paste(path, "/Lung_squamous_cell_carcinoma.RData", sep=""))
 ```
 
 We can see that three different dataframes have been uploaded. Let us inspect them separately.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 head(raw_counts_df, 2)
 cat("\nDimension: ", dim(raw_counts_df))
 ```
 
 The data-frame *raw_counts_df* represents the raw RNA-seq counts (sequence reads per gene/how many reads have mapped to each gene): the rows correspond to the Ensembl Gene IDs (ex: ENSG00000278704) and the columns to the tumor and normal samples from which the reads were counted for each gene (ex: TCGA-22-4609-01A). 62940 genes are included in the dataframe and 100 samples are taken into account, 50 cases and 50 controls, respectively.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 head(c_anno_df, 5)
 cat("\nDimension: ", dim(c_anno_df))
 ```
 
 The dataframe *c_anno_df* specifies the condition (*condition* column) corresponding to each sample name (*sample* column), either "case" or "control". The number of rows (samples) is 100, properly matching the number of columns (samples) of *raw_counts_df*.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 head(r_anno_df, 5)
 cat("\nDimension: ", dim(r_anno_df))
 ```
@@ -64,13 +64,13 @@ The dataframe *r_anno_df* maps each *Ensembl gene ID* from *raw_counts_df* to it
 
 Since we want to perform differential gene expression analysis, we are interested only in protein-coding genes, so we need to filter *raw_counts_df* according to this experimental choice. The R package **biomaRt** allows us to connect to a specific biomaRt database, in this case the ENSEMBL database, and to select the Human genes dataset.
 
-```{r, include=TRUE}
-ensembl<- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
+ensembl<- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror="useast")
 ```
 
 The *getBM()* function is the main query function in biomaRt and it has four main arguments: *attributes*, *filters*, *values* and *mart*. We have already set the latter and assigned it to the variable *ensembl*. The coding/non-coding information is included in the attribute *gene_biotype*. We have chosen to filter the Human genes dataset according to the *ensembl_gene_id* attribute, which we have at disposal to identify the genes belonging to our starting dataset related to lung squamous cell carcinoma.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 anno_query <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"), 
                    filters = ("ensembl_gene_id"), 
                    values = r_anno_df$ensembl_gene_id, 
@@ -81,7 +81,7 @@ cat("\nDimension: ", dim(anno_query))
 
 All the genes that were recognized by *Ensembl* are now matched to their type so we can subset the lung squamous cell carcinoma dataset to include only protein-coding genes.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 coding_query <- anno_query[which(anno_query$gene_biotype == "protein_coding"), ]
 cat("\nDimension: ", dim(coding_query))
 head(coding_query,5)
@@ -89,7 +89,7 @@ head(coding_query,5)
 
 The number of genes has approximately become \~1/3 of the initial number of genes. After merging the *coding_query* result with the starting dataset, we have the updated version of the dataset, containing only protein coding genes (*clean_coding_raw*).
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 tmp <-raw_counts_df
 coding_raw <- merge(coding_query,tmp, by.y = 'row.names', by.x = "ensembl_gene_id")
 clean_coding_raw <- coding_raw[1:nrow(coding_raw),3:ncol(coding_raw)]
@@ -100,7 +100,7 @@ row.names(clean_coding_raw) <- coding_raw$ensembl_gene_id
 
 The dataset contains standard counts, so the number of reads $X_i$ for each gene transcript $i$ in $N$ given samples/replicates. We need to obtain the counts per million (CPM, *read_millions*), so we can check the library size of each sample. We have generated a bar plot having the number of reads (per million) in the x-axis and the samples in the y-axis. In this way, we can qualitatively asses a threshold for the necessary number of reads, valid for all samples, averaged across all gene transcripts (for each sample).
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 size_raw <- data.frame("sample" = colnames(clean_coding_raw),
                        "read_millions" = colSums(clean_coding_raw/1000000))
 ggplot(data=size_raw, aes(sample,read_millions))+
@@ -110,7 +110,7 @@ ggplot(data=size_raw, aes(sample,read_millions))+
 
 We are explicitly asked to filter raw counts data retaining only genes with a raw count \> 20 in at least 5 Cases or 5 Control samples. To do so, thanks to *apply()*, we use the *by()* function on each row (gene) of the clean dataset (with only protein-coding genes) to divide case samples from control samples and sum only the number of case samples and control samples (separately), that record (for each gene) a number of reads greater than the threshold. So, for each gene, we have two numbers, respectively for case and control.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 threshold<-20
 cat("\nType of condition: ", typeof(c_anno_df$condition))
 # Convert condition in factor (now it is a character) to use by() function
@@ -127,19 +127,19 @@ table(filter_vec)
 
 Since in the next step we need to pick at least 5 Case or 5 Control samples, we now have to make an arbitrary choice between the two numbers: taking the maximum or minimum (for equal values the default choice is the first element, so control) will impact the downstream results, since we do not know which condition is chosen for each gene.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 filter_vec_min <- apply(clean_coding_raw,1,
     function(y) min(by(y, c_anno_df$condition, function(x) sum(x > threshold))))
 filter_vec_min[1250:1254]
 ```
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 filter_vec_max <- apply(clean_coding_raw,1,
     function(y) max(by(y, c_anno_df$condition, function(x) sum(x > threshold))))
 filter_vec_max[1250:1254]
 ```
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 repl_thr<- 5
 
 ct_min <-table(filter_vec_min)
@@ -159,34 +159,33 @@ cat("\n")
 
 Looking at the contingency tables, we have decided to go for *max()*, since the number of genes that meet the 5 replicates condition is greater (Also, see how many genes have respectively 0 and 50 samples that have a number of reads greater than 20). We proceed to remove genes with low signal, according to the 5 samples filtering.
 
-```{r, include=TRUE}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 filter_counts_df <- clean_coding_raw[filter_vec_max>=repl_thr,]
 cat ("\nDimension: ", dim(filter_counts_df)) 
 ```
 
 The dimension of the filtered dataset got even smaller, with 17510 genes as rows, so 4645 less. We have filtered the *r_anno_df* dataset as well to update the annotation corresponding to the filtered genes.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 filter_anno_df <- r_anno_df[rownames(filter_counts_df),]
 dim(filter_anno_df)
 ```
 
 In order to understand the distribution of the numbers of reads (each related to a gene ID) per sample, we have produced a box and whiskers plot, using the *geom_boxplot()* function, considering the numbers of reads as continuous variables, that we had to scale in log10 + 1 to avoid infinite values when the number of reads are zero for any gene ID of the considered replicate/sample.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 long_counts_df <- gather(filter_counts_df, key = "sample", value = "read_number")
 ggplot(data=long_counts_df,aes(sample,read_number+1)) +
    geom_boxplot(colour="indianred",fill="indianred",alpha=0.7) +
    theme_bw() +
    scale_y_log10()
-
 ```
 
 Under the assumption of independent and identically distributed variables, and being the number of variables (gene ID) large enough and the distribution not wild, we can assume that the central limit theorem holds and normalization of the number of reads per sample can take place.
 
 First we need to create a DGEList, *edge_c*, which stands for Digital Gene Expression List, having as parameters *counts*, *samples*, *gene* and *group*, all the necessary information to proceed with the number of reads per sample normalization.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 edge_c <- DGEList(counts=filter_counts_df,group=c_anno_df$condition,
                   samples=c_anno_df,genes=filter_anno_df) 
 head(edge_c,2)
@@ -196,7 +195,7 @@ We recall that TMM doesn't normalize the reads, but instead calculates normaliza
 
 Instead of using the total library size (the sum of the reads for all genes), TMM trims off the most highly variable genes (Trimmed mean of M-values, where M-values are the log fold change between each sample and a reference) and then calculates a normalization factor that is used to adjust the library size when we compute logCPM values with the function *cpm()*. We have used the *geom_boxplot()* function again to visually check if the bar plots of the normalized distribution of the numbers of reads were more aligned, as expected.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 edge_n <- calcNormFactors(edge_c,method="TMM")
 head(edge_n,2)
 
@@ -212,7 +211,7 @@ ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
 
 In order to verify that the normalization process worked, we have checked the values inside the CPM table, following instructions from <https://combine-australia.github.io/RNAseq-R/06-rnaseq-day1.html> (*Filtering lowly expressed genes* section).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # Which values in cpm_table are greater than 0.25? 
 # (As a general rule, a good threshold can be chosen by identifying the CPM 
 # that corresponds to a count of 10)
@@ -235,7 +234,7 @@ abline(h=10, col="blue")
 
 We have then applied unsupervised methods to gather preliminary information about the possibility of distinction between case and control samples, by applying hierarchical clustering with Ward's minimum variance criterion to the distance matrix, which results in the dendogram *hc*.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 clu_data <- t(scale(t(cpm_table)))
 dd <- dist(t(clu_data), method = "euclidean") 
 hc <- hclust(dd, method="ward.D")
@@ -244,7 +243,7 @@ plot(hc)
 
 We have also performed Principal Component Analysis.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 data.matrix <- cpm_table
 color <- c(rep("red", ncol(cpm_table))) # case samples
 color[grep('11A',colnames(data.matrix))]<-'blue' # control samples
@@ -254,7 +253,7 @@ text(data.PC$x[,1],data.PC$x[,2]+10,colnames(cpm_table),cex=0.7)
 
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 library(ggfortify)
 pca_res <- prcomp(t(data.matrix), scale. = TRUE)
 autoplot(pca_res, colour=color) #label=TRUE, label.size=3
@@ -264,7 +263,7 @@ We can clearly see that the two clusters have been identified and separated (wit
 
 Linear modeling and differential expression analysis in *edgeR* requires a design matrix to be specified. The design matrix records which treatment conditions were applied to each sample, and it also defines how the experimental effects are parametrized in the linear models. This design matrix simply links each group to the samples that belong to it. Each row of the design matrix corresponds to a sample whereas each column represents a coefficient corresponding to one of the 2 groups.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 design <- model.matrix(~0+group, data=edge_n$samples)
 colnames(design) <- levels(edge_n$samples$group)
 rownames(design) <- edge_n$samples$sample
@@ -279,7 +278,7 @@ As explained by Chen et al. (2016, doi: 10.12688/f1000research.8987.2):
 
 The estimation of QL dispersion is performed using the *glmQLFit()* function.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # calculate dispersion and fit with edgeR (necessary for differential expression analysis)
 edge_d <- estimateDisp(edge_n,design)
 
@@ -289,26 +288,25 @@ plotBCV(edge_d)
 
 The NB dispersions tend to be higher for genes with very low counts. The dispersion trend (blue curve) tends to decrease smoothly with abundance and to asymptotic to a constant value (red line) for genes with larger counts. The asymptotic value for the BCV seems to be greater than 0.5, which is acceptable for human subjects.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 edge_f <- glmQLFit(edge_d,design) #robust=TRUE
 head(edge_f$coefficients,5)
 summary(edge_f$df.prior)
 #visualization of QL dispersion
 plotQLDisp(edge_f)
-
 ```
 
 The plot of the quarter-root QL dispersion against the average abundance of each gene shows that there is not a difference between the raw (before EB moderation) and squeezed (after EB moderation) dispersions' estimates.
 
 The next step is to test for differential expression between the experimental groups. The contrast corresponding to case and control samples are constructed using the *makeContrasts()* function:
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 contro <- makeContrasts("case-control", levels=design) 
 ```
 
 For example, a positive log2-fold-change (logFC) will indicate an up-regulated gene in case samples with respect to control ones, whereas a negative logFC will indicate a less expressed gene in carcinoma than normal cells. We will use QL F-tests as they give stricter error rate control by accounting for the uncertainty in dispersion estimation. The top DE genes can be viewed with *topTags()*.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # fit the model with generalized linear models
 edge_t <- glmQLFTest(edge_f,contrast=contro)
 # ordered by p-value
@@ -319,14 +317,14 @@ summary(is.de)
 
 The top DE gene SLC2A1 has a large positive logFC, showing that it is far more highly expressed in the lung squamous carcinoma cells than normal. This gene is indeed known to be involved in a variety of cell death modalities and has been found to be associated with the prognosis and immune microenvironment of a variety of tumors. In particular, it is found to be highly expressed in LUSC (Wang et al., 2022, doi: 10.3389/fgene.2022.1068462).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 degs_example <- as.data.frame(topTags(edge_t,n=20, p.value = 0.01,sort.by = "logFC"))
 head(degs_example,5)
 ```
 
 If we look at the results, sorting by logFC, the top DE gene is MAGEA9B, which is know to be expressed in many tumors of several types, including melanoma, head and neck squamous cell carcinoma, lung carcinoma and breast carcinoma,but not in normal tissues (genecards.org).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 plotMD(edge_t, status=is.de, values=c(1,-1), col=c("red","blue"),legend="topright")
 ```
 
@@ -334,7 +332,7 @@ The MD plot shows the log-fold change and average abundance of each gene. Signif
 
 Let us know apply the proposed filtering on logCPM, logFC and FDR. We have set a p-value cutoff of 0.01, a log fold change ratio \> 1.5 for up-regulated genes and \< -1.5 for down-regulated genes and a logCPM \>1.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # keep all the DE genes with a pvalue lower than 0.01
 DEGs_clean <- as.data.frame(topTags(edge_t, n=nrow(edge_t), p.value=0.01))
 DEGs_clean <- DEGs_clean[DEGs_clean$logCPM > 1, ] # 10940 obs. of 8 variables
@@ -349,7 +347,7 @@ table(DEGs_clean$class)
 
 We have decided not to relax the threshold since the number of up-regulated and down-regulated is enough to proceed with the analysis. We have decided to display both the volcano plot and the MA plot, since they can be compared on the basis of the shared log FC values, respectively on the y-axis and on the x-axis. The MA plot does not provide information about the magnitude of the p-value, while the volcano plot does not include the information about average expression.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # display MA plot
 input_df_MA <- DEGs_clean
 xlabel <- "log2 avg CPM (A)"
@@ -364,7 +362,7 @@ legend(13, 10, legend=c("-", "+", "="),
        col=c("blue", "red", "black"), cex=0.8, title="class", pch=c(19,19,19))
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # Display volcano plot 
 pVO <- ggplot(data = input_df_MA, aes(x = logFC, y = -log10(PValue), col=class, label="")) +
   ggtitle("Volcano plot") +
@@ -379,7 +377,7 @@ pVO + theme(plot.title = element_text(color="black", size=14, face="bold",hjust 
 
 Then, we have created an annotated heatmap, focusing only on up and down-regulated genes.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 
 cols <- c(rep("chartreuse4",100))
 cols[grep('11A',colnames(cpm_table))]<-'pink' # case - control
@@ -399,7 +397,7 @@ legend("bottomright", legend=c("case", "control"), fill = c("chartreuse4", "pink
 
 We note that the *Colv* parameter has its default value, so the column dendogram is reordered and a control sample gets included in a cluster belonging to the case side. Moreover, we cannot actually verify that the heatmap is properly constructed, due to the high number of genes. So, we have decided to make a reduced version of this heatmap, focusing only on the top 20 differentially expressed genes, 10 from the up-regulated subset and 10 from the down-regulated subset, respectively. First, we subset the DEGs dataset into two different ones (*upreg_df* and *downreg_df*), respectively for up and down-regulated genes. Second, we order them according to logFC (from maximum positive to minimum positive value for up-regulated genes, from minimum negative to maximum negative for down-regulated genes). Then, we have to order the samples of *c_anno_df* to split case and control as two subgroups. We have selected the top 10 DE genes (by *ensembl_gene_id*) from *upreg_df* and *downreg_df*, respectively. In order to properly configure the heatmap matrix, we had to sort the *cpm_table* columns (samples), matching the two subgroups (case-control) of *ordered_c_anno_df*. Finally, we have displayed the reduced version of the heatmap, replacing ensemble gene IDs with gene names.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 
 upreg_df <- DEGs_clean[DEGs_clean$class=="+",]
 downreg_df <- DEGs_clean[DEGs_clean$class=="-",]
@@ -442,7 +440,7 @@ By looking at this heatmap, we can clearly distinguish the up-regulated from the
 
 Let's start by performing GO (BP and MF) analysis, focusing on the top 10 enriched GO terms, respectively for the up and down regulated genes.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Perform Gene Ontology enrichment analysis (Biological Process) on up-regulated genes.
 ego_BP_up <- enrichGO(gene = upreg_df$external_gene_name,
                    OrgDb = org.Hs.eg.db,
@@ -453,7 +451,7 @@ ego_BP_up <- enrichGO(gene = upreg_df$external_gene_name,
                    qvalueCutoff = 0.05)
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Visualize the top 10 enriched terms
 barplot(ego_BP_up, showCategory = 10)
 dotplot(ego_BP_up, showCategory = 10)
@@ -466,14 +464,14 @@ In particular, from the second view (dotplot), we can see that the highest numbe
 
 To further analyse the BP enrichment results, we have calculated the pairwise similarities of the enriched term, using the *pairwise_termsim()* function on GO BP for up-regulated genes, which exploits the Jaccard's similarity index (JC).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 x_BP_up <- pairwise_termsim(ego_BP_up)
 emapplot(x_BP_up,showCategory = 10)
 ```
 
 As expected, there are two main connected components, the bigger one regarding cellular duplication and the smaller one (triangle) concerning skin and epidermis development.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Perform Gene Ontology enrichment analysis (Biological Process) on down-regulated genes
 ego_BP_down <- enrichGO(gene = downreg_df$external_gene_name,
                    OrgDb = org.Hs.eg.db,
@@ -484,7 +482,7 @@ ego_BP_down <- enrichGO(gene = downreg_df$external_gene_name,
                    qvalueCutoff = 0.05)
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Visualize the top 10 enriched terms
 barplot(ego_BP_down, showCategory = 10)
 dotplot(ego_BP_down, showCategory=10)
@@ -495,14 +493,14 @@ By looking at the first view (barplot) of the GO enrichment analysis performed i
 
 In particular, from the second view (dotplot), we note that a high number of genes is involved in the positive regulation of MAPK cascade. We know from literature that this pathway has a key role in cell differentiation and apoptosis (Plotnikov et al., 2011, <https://doi.org/10.1016/j.bbamcr.2010.12.012>) and its regulation is disrupted by several diseases, including lung cancer.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 x_BP_down<- pairwise_termsim(ego_BP_down)
 emapplot(x_BP_down,showCategory = 10)
 ```
 
 As expected, there is a main connected component, regarding immune response and cell adhesion. MAPK cascade regulation is instead isolated, as well as vascular process in circulatory system. Nevertheless, these two processes remain relevant in the cancer context, according to literature.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Perform Gene Ontology enrichment analysis (Molecular Function) for up-regulated genes
 ego_MF_up <- enrichGO(gene = upreg_df$external_gene_name,
                    OrgDb = org.Hs.eg.db,
@@ -513,7 +511,7 @@ ego_MF_up <- enrichGO(gene = upreg_df$external_gene_name,
                    qvalueCutoff = 0.05)
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Visualize the top 10 enriched terms
 barplot(ego_MF_up, showCategory = 10)
 dotplot(ego_MF_up, showCategory = 10)
@@ -522,14 +520,14 @@ heatplot(ego_MF_up,showCategory =10)
 
 By looking at the first view (barplot) of the GO enrichment analysis performed in the context of Molecular Function, we have detected as high ranking terms (by adjusted p-value) single-stranded DNA helicase activity and structural constituent of skin epidermis. In particular, from the second view (dotplot), we note that a high number of genes is involved in tubulin and microtubule binding. These functions are consistent with the above discovered biological processes.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 x_MF_up<- pairwise_termsim(ego_MF_up)
 emapplot(x_MF_up,showCategory = 10)
 ```
 
 Pairwise-similarity analysis shows three main connected components: microtubule-related, helicase-related terms and a triangle of specific binding, including retinoid and isoprenoid. In particular, the over-expression of retinoid receptors (Tripathi et al., 2019 doi: 10.1016/j.phrs.2019.104331) is contemplated in lung cancer.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Perform Gene Ontology enrichment analysis (Molecular Function) for down-regulated genes
 ego_MF_down <- enrichGO(gene = downreg_df$external_gene_name,
                    OrgDb = org.Hs.eg.db,
@@ -540,7 +538,7 @@ ego_MF_down <- enrichGO(gene = downreg_df$external_gene_name,
                    qvalueCutoff = 0.05)
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ## Visualize the top 10 enriched terms
 barplot(ego_MF_down, showCategory = 10)
 dotplot(ego_MF_down, showCategory = 10)
@@ -549,7 +547,7 @@ heatplot(ego_MF_down,showCategory = 10)
 
 By looking at the first view (barplot) of the GO enrichment analysis performed in the context of Molecular Function, we have detected as high ranking terms (by adjusted p-value) immune receptor activity and extracellular matrix structural constituent. In particular, from the second view (dotplot), we note that a high number of genes is involved in glycosaminoglycan binding. The latter protein is involved in cancer development and progression (Wei et al., 2020, doi: 10.3390/ijms21175983) and it is one of the main components of the extracellular matrix, influencing cell behavior, matrix properties and immune supervision. These functions are consistent with the above discovered biological processes (immune response and cell adhesion).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 x_MF_down<- pairwise_termsim(ego_MF_down)
 emapplot(x_MF_down,showCategory = 10)
 ```
@@ -558,7 +556,7 @@ Pairwise-similarity detects a bigger connected component related to extracellula
 
 In order to use up-regulated and down-regulated gene subsets for the construction of WP Pathways, we need to include the *Entrez IDs* to the above-produced *DEGs_clean* dataset.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 
 # Use biomaRt to map Gene symbols, Entrez IDs and Ensembl gene IDs from DGEList object (DEGs_clean) 
 convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
@@ -572,7 +570,7 @@ DEGs_entrez <- DEGs_entrez[which(!is.na(DEGs_entrez$entrezgene_id)),]
 DEGs_entrez <- DEGs_entrez[-which(duplicated(DEGs_entrez$entrezgene_id)),] 
 ```
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ranks <- DEGs_entrez[, c("logFC","class")]
 # associated each Entrez ID to the corresponding logFC
 row.names(ranks) <- DEGs_entrez$entrezgene_id
@@ -593,14 +591,14 @@ legend(10000, 10, legend=c("-", "+", "="),
 
 Having the gene *Entrez IDs*, we have to update the up and down-regulated gene subsets.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 upreg_df_entrez <- DEGs_entrez[DEGs_entrez$class=="+",]
 downreg_df_entrez <- DEGs_entrez[DEGs_entrez$class=="-",]
 ```
 
 We can now perform WP (over-representation) analysis on up and down-regulated genes, reporting the top 10 enriched pathways.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 eWP_up = enrichWP(gene = upreg_df_entrez$entrezgene_id,
                   organism = "Homo sapiens",
                   pvalueCutoff = 0.05,
@@ -610,7 +608,7 @@ head(eWP_up, n=5)
 
 It is interesting to note that Cell cycle and DNA replication are the top2 and top3 WP pathways, in agreement with the GO enrichment analysis on the up-regulated genes. Even though many types of cancer-related pathways are detected, they are not directly linked to lung. However, taking into account the possibility of tumor progression and metastasis, the involvement of other tissues is not to be a-priori excluded.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 eWP_down = enrichWP(gene = downreg_df_entrez$entrezgene_id,
                   organism = "Homo sapiens",
                   pvalueCutoff = 0.05,
@@ -622,7 +620,7 @@ The WP Complement system (top1) is linked to immune system and, along with coagu
 
 For the sake of curiosity, we have also performed enriched KEGG pathways resulting from both up- and down-regulated gene lists.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 upkegg <- enrichKEGG(gene = upreg_df_entrez$entrezgene_id,
                      organism = 'human',
                      keyType = "kegg",
@@ -652,7 +650,7 @@ KEGG enrichment looks more consistent for the up-regulated genes than for the do
 
 In order to use the function *pathview()*, we have to create a vector, containing logFC values related to the corresponding Entrez gene IDs, belonging to the up-regulated gene subset. Since the function only accepts KEGG enrichment pathway results as input, we have chosen the top1 Cell cycle pathway (*ID: hsa04110*), which is also present in WP pathway results, ranking second.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 logFC <- upreg_df_entrez$logFC
 names(logFC) <- upreg_df_entrez$entrezgene_id
 
@@ -664,13 +662,11 @@ pT <- pathview(gene.data = logFC,
 
 head(pT$plot.data.gene,5)
 str(pT)
-
-
 ```
 
 ![pathview() output for KEGG native results.](hsa04110.pathview.png)
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 pF <- pathview(gene.data = logFC,
          pathway.id = 'hsa04110',
          species = "human",
@@ -680,7 +676,6 @@ pF <- pathview(gene.data = logFC,
 
 head(pF$plot.data.gene,5)
 str(pF)
-
 ```
 
 ![pathview() output for Graphviz (KEGG) results.](hsa04110.pathview.Graphviz.png)
@@ -693,7 +688,7 @@ To proceed in the analysis, we have decided to keep the *upreg_df_entrez* subset
 
 Next, we are going to determine whether the regulatory sequences (e.g., promoters) of the set of up-regulated genes have significantly higher than expected affinity for a regulatory protein or microRNA for which the DNA-binding motif is known (through the PWM matrices provided by *PWMLogn.hg19.MotifDb.Hsap* for each candidate), using the *motifEnrichment()* function (the lognormal affinity background distribution is applied). Such a motif will be considered "enriched" in the set of sequences. The regulatory proteins whose motifs are most enriched in the set of regulatory sequences (of the up-regulated genes) are candidate transcriptional regulators for some or all of the genes and this result is calculated by the *groupReport()* function. In particular, by setting *by.top.motifs = T*, we ranks motifs by breadth of enrichment, which is calculated by comparing enrichment between motifs in individual sequences. We then select the first 5 (supposed) Transcription Factors corresponding to the top enriched motifs, trough the plot function, using a p-value of 0.05 as a threshold on the *groupReport()* output (*report* variable).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 ensembl <-useMart(biomart = 'ensembl', dataset = 'hsapiens_gene_ensembl')
 promoter_seq <- getSequence(id = upreg_df_entrez$ensembl_gene_id,
                             type = 'ensembl_gene_id',
@@ -712,7 +707,6 @@ enriched_TFs <- motifEnrichment(sequences, PWMLogn.hg19.MotifDb.Hsap, score = "a
 report <- groupReport(enriched_TFs, by.top.motifs = T)
 report[report$p.value < 0.05]
 plot(report[1:5], fontsize = 7, id.fontsize=5)
-
 ```
 
 **7.Select one top enriched TF, compute the empirical distributions of scores for all the matching MOtifDB PWMs to find the 99.75% threshold cutoff.**
@@ -721,7 +715,7 @@ Now that we have identified which supposed TFs have the top enriched scores in t
 
 We have ruled out PGAM2 (top1 enriched motif), since it encodes for a muscle-specific Phosphoglycerate Mutase, so it is a protein but not a TF (genecards.org & <https://www.ncbi.nlm.nih.gov>).
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # select JUND (TF)
 TF <- report$target[2] 
 
@@ -733,8 +727,7 @@ names(PWM) = sapply(names(PWM),function(x) strsplit(x,"-")[[1]][3])
 
 The function *motifEcdf()* computes the empirical cumulative distribution function of the scores (for each motif/PWM), that are obtained by *motifScores()* applied to the PWMs (18) against all the promoters of the human genome, that have different lengths, to find overall affinity.
 
-```{r}
-
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # calculate empirical score distributions for the JUND motifs 
 # (compute the empirical distributions of scores for all the detected PWMs) 
 # against all genome promoters (of different lengths)
@@ -747,12 +740,11 @@ scores <- motifScores(sequences, PWM, raw.scores = T, verbose=T)
 # compute threshold cutoff on the empirical score distributions for all the PWS 
 # (against all genome promoters)
 threshold <- lapply(ecdf, function(x) quantile(x, 0.9975))
-
 ```
 
 **8. Identify which up-regulated genes have a region in their promoter with binding scores for JUND above the computed threshold**
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # calculate empirical score distribution for the JUND motifs against our set of promoters (background)
 #  if raw.scores=FALSE and cutoff=threshold(0.9975), returns a list of score values after cutoff
 scores = motifScores(sequences, PWM, raw.scores = FALSE, cutoff = unlist(threshold))
@@ -764,7 +756,7 @@ length(enriched_jund)
 
 Since the number of up-regulated genes with binding affinity for JUND is 1345 over 1492 (the total number of up-regulated genes), about the 90%. This result is not informative. Hence we have decided to raise the threshold to 99.9%.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 threshold_update <- lapply(ecdf, function(x) quantile(x, 0.999))
 scores_update = motifScores(sequences, PWM, raw.scores = FALSE, cutoff = unlist(threshold_update))
 scores_sign_update <- which(apply(scores_update,1,sum) > 0)
@@ -777,7 +769,7 @@ The number of up-regulated genes with binding affinity for JUND has now become 5
 
 **9. Find PPI interactions among differentially expressed genes and export the network in TSV format**
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # Resume up and down-regulated gene subsets, ordering by p-value
 upreg_STRING <- upreg_df[order(upreg_df$PValue),]
 downreg_STRING <- downreg_df[order(downreg_df$PValue),]
@@ -798,7 +790,7 @@ We are supposed to upload the generated *txt* files on the STRING web interface.
 
 First we get the PNG images of the PPI interactions' networks through the function *rba_string_network_image*, to have a qualitative assessment of the results.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # PNG images of the PPI interactions output networks from STRING corresponding to 
 # up-regulated (first 100), down-regulated (first 100), all DE (first 200 and 2000) lists. 
 # We chose to cut the lists for readability purposes and STRINGdb constraints.
@@ -809,21 +801,21 @@ PPI_graph_up <- rba_string_network_image(ids=upreg_STRING$external_gene_name[1:1
 
 ![STRING PPI interactions' network for the first 100 up-regulated genes.](rbioapi/100_up_net.png)
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 PPI_graph_down <- rba_string_network_image(ids=downreg_STRING$external_gene_name[1:100], 
                   image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
 ![STRING PPI interactions' network for the first 100 down-regulated genes.](rbioapi/100_down_net.png)
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 PPI_graph_DE_200 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:200], 
                     image_format = "image", species = 9606, network_flavor = "evidence")
 ```
 
 ![STRING PPI interactions' network for the first 200 up and down-regulated genes (according to p-value).](rbioapi/200_updown_net.png)
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:2000], 
                      image_format = "image", species = 9606, network_flavor = "evidence")
 ```
@@ -834,7 +826,7 @@ PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_na
 
 If we used the web interface to get the PPI interactions' networks, we would have to export the corresponding TSV files and then reload them into RStudio. Instead, we have decided to employ the function *rba_string_interactions_network()* from *rbioapi* to get the PPI interactions network information as it is contained in the TSV files (exportable from the STRING web interface). We are going to use both methods for the reduced up-regulated genes' subset to verify that their results are consistent (the same). If so, we will perform the LCC (Largest Connected Component) identification only with the *rbioapi* package, since it is quicker.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 # Alternative to tsv file upload (rbioapi) 
 PPI_net_up <- rba_string_interactions_network(ids=upreg_STRING$external_gene_name[1:100], 
               species=9606, required_score = 400) 
@@ -868,13 +860,11 @@ rownames(PPI_tsv_up) <- 1:nrow(PPI_tsv_up)
 
 identical(PPI_net_up$preferredName_A, PPI_tsv_up$X.node1) # TRUE in date: 13/01/2024 at 11:06
 identical(PPI_net_up$preferredName_B, PPI_tsv_up$node2) # TRUE in date: 13/01/2024 at 11:06
-
 ```
 
 We have verified that the PPI interactions' network produced by *rbioapi* and STRING web interface are the same (15/01/2024, 11:08), so we can proceed with the analysis using the first tool for all the gene lists.
 
-```{r}
-
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 PPI_net_down <- rba_string_interactions_network(ids=downreg_STRING$external_gene_name[1:100], 
                 species=9606, required_score = 400)
 # Deleting duplicate rows (for undirected edges)
@@ -891,13 +881,11 @@ PPI_net_DE_2000 <- rba_string_interactions_network(ids=all_de_STRING$external_ge
                    species=9606, required_score = 400)
 PPI_net_DE_2000 <- distinct(PPI_net_DE_2000)
 PPI_net_DE_2000 <- PPI_net_DE_2000[, -c(1,2)]
-
 ```
 
 We have designed the *find_largest_conn_comp()* function that returns and plots (as a graph) the LCC, following the steps explained in the code comments.
 
-```{r}
-
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 find_largest_conn_comp <- function(PPI_net){
   # isolate unique gene names from the node columns (of the PPI interactions network dataframe)
   gene_names <- unique(unlist(PPI_net[, c(1,2)]), use.names = FALSE)
@@ -945,7 +933,7 @@ find_largest_conn_comp <- function(PPI_net){
 
 We can now use the *find_largest_conn_comp()* function on all four PPI networks, starting from the up-regulated genes.
 
-```{r}
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 #Identify and plot the largest connected component in the up-regulated genes PPI network
 lcc_up_100 <- find_largest_conn_comp(PPI_net_up)
 
