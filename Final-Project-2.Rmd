@@ -734,11 +734,9 @@ Depending on the *kegg.native* parameter setting, *pathview()* outputs either tw
 
 **6. Identify Transcription Factors with enriched scores in the promoters of all up-regulated genes**
 
-To proceed in the analysis, we have decided to keep the *upreg_df_entrez* subset, to have as much consistency as possibile beween gene identifications and for reusability purposes. Then, we have used the *getSequence()* function to extract the promoter sequences (flanking sequences) of all the included up-regulated genes (by emsembl IDs), with a window of 500 nucleotides upstream each gene. 
+To proceed in the analysis, we have decided to keep the *upreg_df_entrez* subset, to have as much consistency as possibile beween gene identifications and for reusability purposes. Then, we have used the *getSequence()* function to extract the promoter sequences (flanking sequences) of all the included up-regulated genes (by emsembl IDs), with a window of 500 nucleotides upstream each gene.
 
-Next, we are going to determine whether the regulatory sequences (e.g., promoters) of the set of up-regulated genes have significantly higher than expected affinity for a regulatory protein or microRNA for which the DNA-binding motif is known (through the PWM matrices provided by *PWMLogn.hg19.MotifDb.Hsap* for each candidate), using the *motifEnrichment()*  function (the lognormal affinity background distribution is applied). Such a motif will be considered "enriched" in the set of sequences. The regulatory proteins whose motifs are most enriched in the set of regulatory sequences (of the up-regulated genes) are candidate transcriptional regulators for some or all of the genes and this result is calculated by the *groupReport()* function. In particular, by setting *by.top.motifs = T*, we ranks motifs by breadth of enrichment, which is calculated by comparing enrichment between motifs in individual sequences. We then select the first 5 (supposed) Transcription Factors corresponding to the top enriched motifs, trough the plot function, using a p-value of 0.05 as a threshold on the groupReport output (*report* variable).
-
-
+Next, we are going to determine whether the regulatory sequences (e.g., promoters) of the set of up-regulated genes have significantly higher than expected affinity for a regulatory protein or microRNA for which the DNA-binding motif is known (through the PWM matrices provided by *PWMLogn.hg19.MotifDb.Hsap* for each candidate), using the *motifEnrichment()* function (the lognormal affinity background distribution is applied). Such a motif will be considered "enriched" in the set of sequences. The regulatory proteins whose motifs are most enriched in the set of regulatory sequences (of the up-regulated genes) are candidate transcriptional regulators for some or all of the genes and this result is calculated by the *groupReport()* function. In particular, by setting *by.top.motifs = T*, we ranks motifs by breadth of enrichment, which is calculated by comparing enrichment between motifs in individual sequences. We then select the first 5 (supposed) Transcription Factors corresponding to the top enriched motifs, trough the plot function, using a p-value of 0.05 as a threshold on the groupReport output (*report* variable).
 
 ```{r}
 ensembl <-useMart(biomart = 'ensembl', dataset = 'hsapiens_gene_ensembl')
@@ -761,12 +759,11 @@ plot(report[1:5], fontsize = 7, id.fontsize=5)
 
 ```
 
-
 **7.Select one top enriched TF, compute the empirical distributions of scores for all the matching MOtifDB PWMs to find the 99.75% threshold cutoff.**
 
 Now that we have identified which supposed TFs have the top enriched scores in the promoters of some (or all) up-regulated genes, we have selected the top2 enriched gene, JUND, which encodes for the transcription factor JunD, a member of the JUN family and a functional component of the AP1 transcription factor complex. It is known to be a proto-oncogene and has been proposed to protect cells from p53-dependent senescence and apoptosis. Additionally, JunD, in absence of c-Jun was found to be involved in Ras-induced lung cancer (Ruiz et al., 2021, 10.1172/jci.insight.124985).
 
-We have ruled out PGAM2 (top1 enriched motif), since it encodes for a muscle-specific Phosphoglycerate Mutase, so it is a protein but not a TF (genecards.org & https://www.ncbi.nlm.nih.gov).
+We have ruled out PGAM2 (top1 enriched motif), since it encodes for a muscle-specific Phosphoglycerate Mutase, so it is a protein but not a TF (genecards.org & <https://www.ncbi.nlm.nih.gov>).
 
 ```{r}
 # select JUND (TF)
@@ -794,9 +791,7 @@ threshold <- lapply(ecdf, function(x) quantile(x, 0.9975))
 
 ```
 
-
 **8. Identify which up-regulated genes have a region in their promoter with binding scores for JUND above the computed threshold**
-
 
 ```{r}
 # calculate empirical score distribution for the JUND motifs against our set of promoters (background)
@@ -807,6 +802,7 @@ scores_sign <- which(apply(scores,1,sum) > 0)
 enriched_jund <- upreg_df_entrez[scores_sign, 2]
 length(enriched_jund)
 ```
+
 Since the number of up-regulated genes with binding affinity for JUND is 1345 over 1492 (the total number of up-regulated genes), about the 90%. This result is not informative. Hence we have decided to raise the threshold to 99.9%.
 
 ```{r}
@@ -817,6 +813,7 @@ scores_sign_update <- which(apply(scores_update,1,sum) > 0)
 enriched_jund_update <- upreg_df_entrez[scores_sign_update, 2]
 length(enriched_jund_update)
 ```
+
 The number of up-regulated genes with binding affinity for JUND has now become 579 over 1492, about 39%, which seems more reasonable.
 
 **9. Find PPI interactions among differentially expressed genes and export the network in TSV format**
@@ -829,7 +826,7 @@ downreg_STRING <- downreg_df[order(downreg_df$PValue),]
 all_de_STRING <- rbind(upreg_STRING,downreg_STRING)
 all_de_STRING <- all_de_STRING[order(all_de_STRING$PValue),]
 
-# Export the above produced lists for STRING website (cutting the lists for readability puroposes)
+# Export the above produced lists for STRING website (cutting the lists for readability purposes)
 write(upreg_STRING$external_gene_name[1:100],"100_upreg_gene_names.txt")
 write(downreg_STRING$external_gene_name[1:100], "100_downreg_gene_names.txt")
 write(all_de_STRING$external_gene_name[1:200], "200_DE_gene_names.txt")
@@ -838,26 +835,37 @@ write(all_de_STRING$external_gene_name[1:2000], "2000_DE_gene_names.txt")
 write(all_de_STRING$external_gene_name, "all_DE_gene_names.txt")
 ```
 
-We are supposed to upload the generated txt files on the STRING web interface. Alternatively, we can connect to STRING APIs through the package *rbioapi*, avoiding the intermediate steps of txt files' production and use of the web interface. First we get the PNG images of the PPI interactions' networks through the function *rba_string_network_image*, to have a qualitative assessment of the resutlts.
+We are supposed to upload the generated txt files on the STRING web interface. Alternatively, we can connect to STRING APIs through the package *rbioapi*, avoiding the intermediate steps of txt files' production and use of the web interface.
+
+First we get the PNG images of the PPI interactions' networks through the function *rba_string_network_image*, to have a qualitative assessment of the results.
 
 ```{r}
-# PNG images of the PPI interactions output networks from STRING corresponding to up-regulated (first 100), down-regulated (first 100), all DE (first 200 and 2000) lists. We chose to cut the lists for readability purposes and STRINGdb contraints.
+# PNG images of the PPI interactions output networks from STRING corresponding to up-regulated (first 100), down-regulated (first 100), all DE (first 200 and 2000) lists. We chose to cut the lists for readability purposes and STRINGdb constraints.
 
 PPI_graph_up <- rba_string_network_image(ids=upreg_STRING$external_gene_name[1:100], image_format = "image", species = 9606, network_flavor = "evidence")
-
-PPI_graph_down <- rba_string_network_image(ids=downreg_STRING$external_gene_name[1:100], image_format = "image", species = 9606, network_flavor = "evidence")
-
-
-PPI_graph_DE_200 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:200], image_format = "image", species = 9606, network_flavor = "evidence")
-
-
-PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:2000], image_format = "image", species = 9606, network_flavor = "evidence")
-
 ```
+
+![STRING PPI interactions' network for the first 100 up-regulated genes.](rbioapi/100_up_net.png)
+
+```{r}
+PPI_graph_down <- rba_string_network_image(ids=downreg_STRING$external_gene_name[1:100], image_format = "image", species = 9606, network_flavor = "evidence")
+```
+
+![STRING PPI interactions' network for the first 100 down-regulated genes.](rbioapi/100_down_net.png)
+
+```{r}
+PPI_graph_DE_200 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:200], image_format = "image", species = 9606, network_flavor = "evidence")
+```
+
+![STRING PPI interactions' network for the first 200 up and down-regulated genes (according to p-value).](rbioapi/200_updown_net.png)
+
+```{r}
+PPI_graph_DE_2000 <- rba_string_network_image(ids=all_de_STRING$external_gene_name[1:2000], image_format = "image", species = 9606, network_flavor = "evidence")
+```
+
 **10. Import the network in R and use *igraph* to identify and plot the largest connected component**
 
-If we used the web interface to get the PPI interactions' networks, we would have to export the corresponding TSV files and thena reload them into RStudio. Instead, we have decided to employ the function *rba_string_interactions_network()*  from *rbioapi* to get the PPI interactions network information as it is contained in the TSV files exportable from the STRING web interface. We are going to use both methods for the reduced up-regulated genes' subset to verify that their results are consistent (the same). If so, we will perform the LC identification only with the *rbioapi* package, since it is quicker.
-
+If we used the web interface to get the PPI interactions' networks, we would have to export the corresponding TSV files and thena reload them into RStudio. Instead, we have decided to employ the function *rba_string_interactions_network()* from *rbioapi* to get the PPI interactions network information as it is contained in the TSV files exportable from the STRING web interface. We are going to use both methods for the reduced up-regulated genes' subset to verify that their results are consistent (the same). If so, we will perform the LC identification only with the *rbioapi* package, since it is quicker.
 
 ```{r}
 # Alternative to tsv file upload
@@ -901,7 +909,7 @@ find_largest_comp <- function(PPI_net){
 }
 ```
 
-We can now use the *find_largest_component()* function both on .tsv files and our *rbioapi* data 
+We can now use the *find_largest_component()* function both on .tsv files and our *rbioapi* data
 
 ```{r}
 find_largest_comp(PPI_tsv_up)
