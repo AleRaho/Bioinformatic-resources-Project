@@ -663,15 +663,15 @@ str(pF)
 
 ```
 
-![pathview() ouput for Graphviz (KEGG) results.](hsa04110.pathview.Graphviz.png)
+![pathview() output for Graphviz (KEGG) results.](hsa04110.pathview.Graphviz.png)
 
-Depending on the *kegg.native* parameter setting, *pathview()* outputs either two png images of the Cell cycle annotated pathway (corresponding to the *pathway.id* parameter provided by KEGG enrichment) or a pdf image exploiting the Grapviz view, which contains a detailed legend of edges and nodes. The latter visualization helps the reader (biologist) explore the pair-wise relationships between genes. In particular, the red nodes represent the overlapping between the Cell cycle pathway and our subset of up-regulated genes. Indeed, they have a positive score, based on the logFC we have provided.
+Depending on the *kegg.native* parameter setting, *pathview()* outputs either two png images of the Cell cycle annotated pathway (corresponding to the *pathway.id* parameter provided by KEGG enrichment) or a pdf image exploiting the Graphviz view, which contains a detailed legend of edges and nodes. The latter visualization helps the reader (biologist) explore the pair-wise relationships between genes. In particular, the red nodes represent the overlapping between the Cell cycle pathway and our subset of up-regulated genes. Indeed, they have a positive score, based on the logFC we have provided.
 
 **6. Identify Transcription Factors with enriched scores in the promoters of all up-regulated genes**
 
-To proceed in the analysis, we have decided to keep the *upreg_df_entrez* subset, to have as much consistency as possibile beween gene identifications and for reusability purposes. Then, we have used the *getSequence()* function to extract the promoter sequences (flanking sequences) of all the included up-regulated genes (by emsembl IDs), with a window of 500 nucleotides upstream each gene.
+To proceed in the analysis, we have decided to keep the *upreg_df_entrez* subset, to have as much consistency as possible between gene identifications and for reusability purposes. Then, we have used the *getSequence()* function to extract the promoter sequences (flanking sequences) of all the included up-regulated genes (by ensembl IDs), with a window of 500 nucleotides upstream each gene.
 
-Next, we are going to determine whether the regulatory sequences (e.g., promoters) of the set of up-regulated genes have significantly higher than expected affinity for a regulatory protein or microRNA for which the DNA-binding motif is known (through the PWM matrices provided by *PWMLogn.hg19.MotifDb.Hsap* for each candidate), using the *motifEnrichment()* function (the lognormal affinity background distribution is applied). Such a motif will be considered "enriched" in the set of sequences. The regulatory proteins whose motifs are most enriched in the set of regulatory sequences (of the up-regulated genes) are candidate transcriptional regulators for some or all of the genes and this result is calculated by the *groupReport()* function. In particular, by setting *by.top.motifs = T*, we ranks motifs by breadth of enrichment, which is calculated by comparing enrichment between motifs in individual sequences. We then select the first 5 (supposed) Transcription Factors corresponding to the top enriched motifs, trough the plot function, using a p-value of 0.05 as a threshold on the groupReport output (*report* variable).
+Next, we are going to determine whether the regulatory sequences (e.g., promoters) of the set of up-regulated genes have significantly higher than expected affinity for a regulatory protein or microRNA for which the DNA-binding motif is known (through the PWM matrices provided by *PWMLogn.hg19.MotifDb.Hsap* for each candidate), using the *motifEnrichment()* function (the lognormal affinity background distribution is applied). Such a motif will be considered "enriched" in the set of sequences. The regulatory proteins whose motifs are most enriched in the set of regulatory sequences (of the up-regulated genes) are candidate transcriptional regulators for some or all of the genes and this result is calculated by the *groupReport()* function. In particular, by setting *by.top.motifs = T*, we ranks motifs by breadth of enrichment, which is calculated by comparing enrichment between motifs in individual sequences. We then select the first 5 (supposed) Transcription Factors corresponding to the top enriched motifs, trough the plot function, using a p-value of 0.05 as a threshold on the *groupReport()* output (*report* variable).
 
 ```{r}
 ensembl <-useMart(biomart = 'ensembl', dataset = 'hsapiens_gene_ensembl')
@@ -770,7 +770,7 @@ write(all_de_STRING$external_gene_name[1:2000], "2000_DE_gene_names.txt")
 write(all_de_STRING$external_gene_name, "all_DE_gene_names.txt")
 ```
 
-We are supposed to upload the generated txt files on the STRING web interface. Alternatively, we can connect to STRING APIs through the package *rbioapi*, avoiding the intermediate steps of txt files' production and use of the web interface.
+We are supposed to upload the generated *txt* files on the STRING web interface. Alternatively, we can connect to STRING APIs through the package *rbioapi*, avoiding the intermediate steps of *txt* files' production and use of the web interface.
 
 First we get the PNG images of the PPI interactions' networks through the function *rba_string_network_image*, to have a qualitative assessment of the results.
 
